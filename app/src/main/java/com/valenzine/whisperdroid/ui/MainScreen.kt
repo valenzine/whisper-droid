@@ -70,9 +70,17 @@ fun MainScreen(navController: NavController) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show loading indicator
+        // Show loading indicator for transcription
         if (uiState is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Loading) {
             CircularProgressIndicator()
+            Text("Transcribing audio...")
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Show loading indicator for formatting
+        if (uiState is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.FormattingText) {
+            CircularProgressIndicator()
+            Text("Formatting text...")
             Spacer(modifier = Modifier.height(16.dp))
         }
 
@@ -96,7 +104,11 @@ fun MainScreen(navController: NavController) {
             value = transcription,
             onValueChange = { },
             label = { Text("Transcription") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp, max = 150.dp),
+            maxLines = 10,
+            singleLine = false
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -111,7 +123,11 @@ fun MainScreen(navController: NavController) {
             value = formattedText,
             onValueChange = { },
             label = { Text("Formatted Text") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp, max = 150.dp),
+            maxLines = 10,
+            singleLine = false
         )
     }
 }

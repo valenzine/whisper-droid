@@ -12,6 +12,7 @@ import java.lang.Exception
 sealed interface TranscriptionUiState {
     object Idle : TranscriptionUiState
     object Loading : TranscriptionUiState
+    object FormattingText : TranscriptionUiState
     data class Success(val transcription: String, val formattedText: String? = null) : TranscriptionUiState
     data class Error(val message: String) : TranscriptionUiState
 }
@@ -45,8 +46,10 @@ class TranscriptionViewModel(
     fun formatText() {
         viewModelScope.launch {
             try {
+                _uiState.value = TranscriptionUiState.FormattingText
                 val result = repository.formatText(_transcription.value)
                 _formattedText.value = result
+                _uiState.value = TranscriptionUiState.Success(_transcription.value, result)
             } catch (e: Exception) {
                 _uiState.value = TranscriptionUiState.Error(e.message ?: "Formatting failed")
             }
