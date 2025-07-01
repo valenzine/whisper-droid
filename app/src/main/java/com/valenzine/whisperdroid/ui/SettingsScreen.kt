@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -14,12 +16,25 @@ import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModelFactory
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(LocalContext.current))) {
+fun SettingsScreen() {
+    val context = LocalContext.current
+    val repository = remember { com.valenzine.whisperdroid.repository.SettingsRepository(context) }
+    val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(repository))
     val transcriptionApiKey by viewModel.transcriptionApiKey.collectAsState()
     val llmApiKey by viewModel.llmApiKey.collectAsState()
 
-    var tempTranscriptionApiKey by remember { mutableStateOf(transcriptionApiKey) }
-    var tempLlmApiKey by remember { mutableStateOf(llmApiKey) }
+    var tempTranscriptionApiKey by remember { mutableStateOf("") }
+    var tempLlmApiKey by remember { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showSnackbar by remember { mutableStateOf(false) }
+
+    // Keep temp values in sync with ViewModel when they change
+    LaunchedEffect(transcriptionApiKey) {
+        tempTranscriptionApiKey = transcriptionApiKey
+    }
+    LaunchedEffect(llmApiKey) {
+        tempLlmApiKey = llmApiKey
+    }
 
     Column(
         modifier = Modifier
@@ -27,6 +42,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        SnackbarHost(hostState = snackbarHostState)
         TextField(
             value = tempTranscriptionApiKey,
             onValueChange = { tempTranscriptionApiKey = it },
@@ -48,8 +64,16 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel(factory = SettingsVi
         Button(onClick = {
             viewModel.saveTranscriptionApiKey(tempTranscriptionApiKey)
             viewModel.saveLlmApiKey(tempLlmApiKey)
+            showSnackbar = true
         }) {
             Text("Save")
+        }
+
+        if (showSnackbar) {
+            LaunchedEffect(snackbarHostState) {
+                snackbarHostState.showSnackbar("API keys saved!")
+                showSnackbar = false
+            }
         }
     }
 }

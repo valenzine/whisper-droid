@@ -1,20 +1,30 @@
 package com.valenzine.whisperdroid.viewmodel
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.valenzine.whisperdroid.repository.TranscriptionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.lang.Exception
 
-class TranscriptionViewModel(context: Context) : ViewModel() {
-    private val repository = TranscriptionRepository(context)
+sealed interface TranscriptionUiState {
+    object Idle : TranscriptionUiState
+    object Loading : TranscriptionUiState
+    data class Success(val transcription: String, val formattedText: String? = null) : TranscriptionUiState
+    data class Error(val message: String) : TranscriptionUiState
+}
+
+class TranscriptionViewModel(
+    private val repository: TranscriptionRepository
+) : ViewModel() {
 
     private val _transcription = MutableStateFlow("")
     val transcription: StateFlow<String> = _transcription
+
+    private val _uiState = MutableStateFlow<TranscriptionUiState>(TranscriptionUiState.Idle)
+    val uiState: StateFlow<TranscriptionUiState> = _uiState
 
     private val _formattedText = MutableStateFlow("")
     val formattedText: StateFlow<String> = _formattedText
@@ -22,9 +32,12 @@ class TranscriptionViewModel(context: Context) : ViewModel() {
     fun transcribeFile(file: File) {
         viewModelScope.launch {
             try {
-                _transcription.value = repository.transcribeFile(file)
+                _uiState.value = TranscriptionUiState.Loading
+                val result = repository.transcribeFile(file)
+                _transcription.value = result
+                _uiState.value = TranscriptionUiState.Success(result)
             } catch (e: Exception) {
-                // TODO: Handle error
+                _uiState.value = TranscriptionUiState.Error(e.message ?: "Transcription failed")
             }
         }
     }
@@ -32,20 +45,11 @@ class TranscriptionViewModel(context: Context) : ViewModel() {
     fun formatText() {
         viewModelScope.launch {
             try {
-                _formattedText.value = repository.formatText(_transcription.value)
+                val result = repository.formatText(_transcription.value)
+                _formattedText.value = result
             } catch (e: Exception) {
-                // TODO: Handle error
+                _uiState.value = TranscriptionUiState.Error(e.message ?: "Formatting failed")
             }
         }
-    }
-}
-
-class TranscriptionViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(TranscriptionViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return TranscriptionViewModel(context) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }

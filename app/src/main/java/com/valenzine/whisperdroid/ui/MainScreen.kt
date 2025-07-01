@@ -10,9 +10,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -24,10 +29,14 @@ import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModelFactory
 import java.io.File
 
 @Composable
-fun MainScreen(navController: NavController, viewModel: TranscriptionViewModel = viewModel()) {
+fun MainScreen(navController: NavController) {
+    val context = LocalContext.current
+    val repository = remember { com.valenzine.whisperdroid.repository.TranscriptionRepository(context) }
+    val viewModel: TranscriptionViewModel = viewModel(factory = TranscriptionViewModelFactory(repository))
     val transcription by viewModel.transcription.collectAsState()
     val formattedText by viewModel.formattedText.collectAsState()
-    val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
         it?.let { uri ->
@@ -46,6 +55,7 @@ fun MainScreen(navController: NavController, viewModel: TranscriptionViewModel =
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        SnackbarHost(hostState = snackbarHostState)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
@@ -59,6 +69,28 @@ fun MainScreen(navController: NavController, viewModel: TranscriptionViewModel =
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Show loading indicator
+        if (uiState is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Loading) {
+            CircularProgressIndicator()
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Show error message
+        if (uiState is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Error) {
+            val errorMessage = (uiState as com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Error).message
+            LaunchedEffect(snackbarHostState, errorMessage) {
+                snackbarHostState.showSnackbar("Error: $errorMessage")
+            }
+        }
+
+        // Show success message
+        if (uiState is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Success) {
+            val transcriptionText = (uiState as com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Success).transcription
+            LaunchedEffect(snackbarHostState, transcriptionText) {
+                snackbarHostState.showSnackbar("Transcription complete!")
+            }
+        }
 
         TextField(
             value = transcription,
