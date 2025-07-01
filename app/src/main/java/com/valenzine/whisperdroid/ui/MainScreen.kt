@@ -27,9 +27,10 @@ import androidx.navigation.NavController
 import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModel
 import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModelFactory
 import java.io.File
+import android.net.Uri
 
 @Composable
-fun MainScreen(navController: NavController) {
+fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
     val context = LocalContext.current
     val repository = remember { com.valenzine.whisperdroid.repository.TranscriptionRepository(context) }
     val viewModel: TranscriptionViewModel = viewModel(factory = TranscriptionViewModelFactory(repository))
@@ -40,12 +41,14 @@ fun MainScreen(navController: NavController) {
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
         it?.let { uri ->
-            val inputStream = context.contentResolver.openInputStream(uri)
-            val file = File(context.cacheDir, "temp_audio_file")
-            inputStream?.let {
-                file.writeBytes(it.readBytes())
-                viewModel.transcribeFile(file)
-            }
+            processAudioFile(uri, context, viewModel)
+        }
+    }
+
+    // Process shared audio file when the screen loads
+    LaunchedEffect(sharedAudioUri) {
+        sharedAudioUri?.let { uri ->
+            processAudioFile(uri, context, viewModel)
         }
     }
 
@@ -129,5 +132,15 @@ fun MainScreen(navController: NavController) {
             maxLines = 10,
             singleLine = false
         )
+    }
+}
+
+// Helper function to process audio files from URI
+private fun processAudioFile(uri: Uri, context: android.content.Context, viewModel: TranscriptionViewModel) {
+    val inputStream = context.contentResolver.openInputStream(uri)
+    val file = File(context.cacheDir, "temp_audio_file")
+    inputStream?.let {
+        file.writeBytes(it.readBytes())
+        viewModel.transcribeFile(file)
     }
 }

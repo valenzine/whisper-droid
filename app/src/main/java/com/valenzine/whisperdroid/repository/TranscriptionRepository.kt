@@ -47,12 +47,16 @@ class TranscriptionRepository(private val context: Context) {
             originalName.endsWith(".opus", ignoreCase = true) -> {
                 originalName.substringBeforeLast(".") + ".mp3"
             }
+            originalName.endsWith(".ogg", ignoreCase = true) -> {
+                originalName.substringBeforeLast(".") + ".mp3"
+            }
             else -> originalName
         }
         
-        // Use audio/mpeg MIME type for .opus files to trick the API
+        // Use audio/mpeg MIME type for unsupported formats to trick the API
         val mimeType = when {
             originalName.endsWith(".opus", ignoreCase = true) -> "audio/mpeg"
+            originalName.endsWith(".ogg", ignoreCase = true) -> "audio/mpeg"
             else -> java.net.URLConnection.guessContentTypeFromName(file.name) 
                 ?: context.contentResolver.getType(android.net.Uri.fromFile(file))
                 ?: "audio/mpeg" // Default to audio/mpeg as fallback

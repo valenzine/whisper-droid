@@ -1,7 +1,9 @@
 package com.valenzine.whisperdroid
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -10,6 +12,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.valenzine.whisperdroid.ui.Navigation
@@ -52,7 +56,24 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    Navigation()
+                    // Check if app was opened via share intent
+                    val sharedAudioUri = remember { mutableStateOf<Uri?>(null) }
+                    
+                    // Handle shared audio file
+                    if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("audio/") == true) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)?.let { uri ->
+                                sharedAudioUri.value = uri
+                            }
+                        } else {
+                            @Suppress("DEPRECATION")
+                            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uri ->
+                                sharedAudioUri.value = uri
+                            }
+                        }
+                    }
+                    
+                    Navigation(sharedAudioUri = sharedAudioUri.value)
                 }
             }
         }
