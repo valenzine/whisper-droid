@@ -83,11 +83,21 @@ class TranscriptionRepository(private val context: Context) {
 
     suspend fun formatText(text: String): String {
         val apiKey = settingsRepository.llmApiKeyFlow.first()
+        val customPrompt = settingsRepository.llmPromptFlow.first()
+        
+        // Use custom prompt if provided, otherwise use default
+        // Always append the transcribed text to the prompt
+        val userPrompt = if (customPrompt.isNotBlank()) {
+            "$customPrompt\n\n$text"
+        } else {
+            "Format the following text with paragraphs:\n\n$text"
+        }
+        
         val request = LlmRequest(
             model = "gpt-4.1-mini",
             messages = listOf(
                 Message("system", "You are a helpful assistant that formats text."),
-                Message("user", "Format the following text with paragraphs:\n\n$text")
+                Message("user", userPrompt)
             )
         )
         // Include the API key in the Authorization header

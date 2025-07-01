@@ -21,6 +21,12 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         initialValue = ""
     )
 
+    val llmPrompt = repository.llmPromptFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = ""
+    )
+
     fun saveTranscriptionApiKey(apiKey: String) {
         viewModelScope.launch {
             repository.saveTranscriptionApiKey(apiKey)
@@ -30,6 +36,12 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
     fun saveLlmApiKey(apiKey: String) {
         viewModelScope.launch {
             repository.saveLlmApiKey(apiKey)
+        }
+    }
+
+    fun saveLlmPrompt(prompt: String) {
+        viewModelScope.launch {
+            repository.saveLlmPrompt(prompt)
         }
     }
 }

@@ -1,6 +1,8 @@
 package com.valenzine.whisperdroid.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -22,9 +24,11 @@ fun SettingsScreen() {
     val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(repository))
     val transcriptionApiKey by viewModel.transcriptionApiKey.collectAsState()
     val llmApiKey by viewModel.llmApiKey.collectAsState()
+    val llmPrompt by viewModel.llmPrompt.collectAsState()
 
     var tempTranscriptionApiKey by remember { mutableStateOf("") }
     var tempLlmApiKey by remember { mutableStateOf("") }
+    var tempLlmPrompt by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
     var showSnackbar by remember { mutableStateOf(false) }
 
@@ -35,11 +39,15 @@ fun SettingsScreen() {
     LaunchedEffect(llmApiKey) {
         tempLlmApiKey = llmApiKey
     }
+    LaunchedEffect(llmPrompt) {
+        tempLlmPrompt = llmPrompt
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         SnackbarHost(hostState = snackbarHostState)
@@ -61,9 +69,23 @@ fun SettingsScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        TextField(
+            value = tempLlmPrompt,
+            onValueChange = { tempLlmPrompt = it },
+            label = { Text("LLM Instruction (transcribed text will be added automatically)") },
+            placeholder = { Text("Format the following text with paragraphs:") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 120.dp, max = 200.dp),
+            maxLines = 5
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Button(onClick = {
             viewModel.saveTranscriptionApiKey(tempTranscriptionApiKey)
             viewModel.saveLlmApiKey(tempLlmApiKey)
+            viewModel.saveLlmPrompt(tempLlmPrompt)
             showSnackbar = true
         }) {
             Text("Save")
@@ -71,7 +93,7 @@ fun SettingsScreen() {
 
         if (showSnackbar) {
             LaunchedEffect(snackbarHostState) {
-                snackbarHostState.showSnackbar("API keys saved!")
+                snackbarHostState.showSnackbar("Settings saved!")
                 showSnackbar = false
             }
         }

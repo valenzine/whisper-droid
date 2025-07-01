@@ -15,6 +15,7 @@ class SettingsRepository(private val context: Context) {
 
     private val transcriptionApiKey = stringPreferencesKey("transcription_api_key")
     private val llmApiKey = stringPreferencesKey("llm_api_key")
+    private val llmPrompt = stringPreferencesKey("llm_prompt")
 
     val transcriptionApiKeyFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
@@ -26,6 +27,11 @@ class SettingsRepository(private val context: Context) {
             preferences[llmApiKey] ?: ""
         }
 
+    val llmPromptFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[llmPrompt] ?: ""
+        }
+
     suspend fun saveTranscriptionApiKey(apiKey: String) {
         context.dataStore.edit {
             it[transcriptionApiKey] = apiKey
@@ -35,6 +41,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveLlmApiKey(apiKey: String) {
         context.dataStore.edit {
             it[llmApiKey] = apiKey
+        }
+    }
+
+    suspend fun saveLlmPrompt(prompt: String) {
+        context.dataStore.edit {
+            it[llmPrompt] = prompt
         }
     }
 }
