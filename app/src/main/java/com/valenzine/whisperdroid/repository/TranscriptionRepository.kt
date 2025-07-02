@@ -412,13 +412,13 @@ class TranscriptionRepository(private val context: Context) {
         val userPrompt = if (customPrompt.isNotBlank()) {
             "$customPrompt\n\n$text"
         } else {
-            "Format the following text with paragraphs:\n\n$text"
+            "You are an editor working with spoken dictation. Please edit the following transcript for grammar, punctuation, and readability while retaining my original tone and speaking style. Make sure the text flows naturally and is organized into logical paragraphs. Return only the edited text in the original language, respecting regional language specifics. Do not translate:\n\n$text"
         }
         
         val request = LlmRequest(
             model = "gpt-4.1-nano",
             messages = listOf(
-                Message("system", "You are a helpful assistant that formats text."),
+                Message("system", "You are a direct text formatting engine. Provide ONLY the formatted text requested by the user, with no additional commentary, introductions, or conclusions."),
                 Message("user", userPrompt)
             )
         )
