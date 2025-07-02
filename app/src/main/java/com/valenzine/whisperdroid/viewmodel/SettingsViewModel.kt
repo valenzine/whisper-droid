@@ -27,6 +27,12 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         initialValue = ""
     )
 
+    val transcriptionModel = repository.transcriptionModelFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "whisper-1"
+    )
+
     fun saveTranscriptionApiKey(apiKey: String) {
         viewModelScope.launch {
             repository.saveTranscriptionApiKey(apiKey)
@@ -42,6 +48,12 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
     fun saveLlmPrompt(prompt: String) {
         viewModelScope.launch {
             repository.saveLlmPrompt(prompt)
+        }
+    }
+
+    fun saveTranscriptionModel(model: String) {
+        viewModelScope.launch {
+            repository.saveTranscriptionModel(model)
         }
     }
 }

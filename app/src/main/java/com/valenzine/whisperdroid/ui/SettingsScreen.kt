@@ -3,11 +3,7 @@ package com.valenzine.whisperdroid.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -17,6 +13,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModelFactory
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
@@ -25,12 +22,17 @@ fun SettingsScreen() {
     val transcriptionApiKey by viewModel.transcriptionApiKey.collectAsState()
     val llmApiKey by viewModel.llmApiKey.collectAsState()
     val llmPrompt by viewModel.llmPrompt.collectAsState()
+    val transcriptionModel by viewModel.transcriptionModel.collectAsState()
 
     var tempTranscriptionApiKey by remember { mutableStateOf("") }
     var tempLlmApiKey by remember { mutableStateOf("") }
     var tempLlmPrompt by remember { mutableStateOf("") }
+    var tempTranscriptionModel by remember { mutableStateOf("whisper-1") }
+    var isModelDropdownExpanded by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     var showSnackbar by remember { mutableStateOf(false) }
+
+    val transcriptionModels = listOf("whisper-1", "gpt-4o-mini-transcribe")
 
     // Keep temp values in sync with ViewModel when they change
     LaunchedEffect(transcriptionApiKey) {
@@ -41,6 +43,9 @@ fun SettingsScreen() {
     }
     LaunchedEffect(llmPrompt) {
         tempLlmPrompt = llmPrompt
+    }
+    LaunchedEffect(transcriptionModel) {
+        tempTranscriptionModel = transcriptionModel
     }
 
     Column(
@@ -69,6 +74,38 @@ fun SettingsScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        ExposedDropdownMenuBox(
+            expanded = isModelDropdownExpanded,
+            onExpandedChange = { isModelDropdownExpanded = !isModelDropdownExpanded }
+        ) {
+            TextField(
+                value = tempTranscriptionModel,
+                onValueChange = { },
+                readOnly = true,
+                label = { Text("Transcription Model") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isModelDropdownExpanded) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor()
+            )
+            ExposedDropdownMenu(
+                expanded = isModelDropdownExpanded,
+                onDismissRequest = { isModelDropdownExpanded = false }
+            ) {
+                transcriptionModels.forEach { model ->
+                    DropdownMenuItem(
+                        text = { Text(model) },
+                        onClick = {
+                            tempTranscriptionModel = model
+                            isModelDropdownExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         TextField(
             value = tempLlmPrompt,
             onValueChange = { tempLlmPrompt = it },
@@ -86,6 +123,7 @@ fun SettingsScreen() {
             viewModel.saveTranscriptionApiKey(tempTranscriptionApiKey)
             viewModel.saveLlmApiKey(tempLlmApiKey)
             viewModel.saveLlmPrompt(tempLlmPrompt)
+            viewModel.saveTranscriptionModel(tempTranscriptionModel)
             showSnackbar = true
         }) {
             Text("Save")
