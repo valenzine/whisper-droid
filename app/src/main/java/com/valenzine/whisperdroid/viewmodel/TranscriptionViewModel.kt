@@ -60,7 +60,7 @@ class TranscriptionViewModel(
                             _uiState.value = TranscriptionUiState.TranscodingFile(
                                 fileName = fileName,
                                 fromFormat = fromFormat,
-                                toFormat = "M4A"
+                                toFormat = "WebM"
                             )
                         }
                         progressMessage.contains("Uploading", ignoreCase = true) -> {

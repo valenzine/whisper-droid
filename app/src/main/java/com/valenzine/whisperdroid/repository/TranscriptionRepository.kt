@@ -50,25 +50,22 @@ class TranscriptionRepository(private val context: Context) {
 
     // Native method declarations for Opus conversion
     private external fun decodeOpusToPCM(inputPath: String, outputPath: String): Boolean
-    // NOTE: This method is stubbed in the native code and will always fail.
-    // We keep the declaration for compatibility but never call it.
-    private external fun convertOpusToAacNative(inputPath: String, outputPath: String): Boolean // Not used - MediaCodec used instead
 
 
     /**
-     * Converts Opus/OGG files to WAV format for compatibility with OpenAI's gpt-4o-mini-transcribe API.
-     * Uses Android MediaCodec APIs to transcode Opus to PCM WAV - simple and OpenAI-compatible.
+     * Converts Opus/OGG files to WebM format for compatibility with OpenAI's gpt-4o-mini-transcribe API.
+     * Uses Android MediaCodec APIs to transcode Opus to Opus in WebM container - efficient and OpenAI-compatible.
      * NEVER sends raw Opus files to non-whisper models.
      * 
      * @param inputFile The input Opus/OGG file
-     * @return The converted WAV file
+     * @return The converted WebM file
      * @throws Exception If conversion fails for any reason
      */
-    private fun convertOpusToAac(inputFile: File): File {
-        println("Converting ${inputFile.name} to WAV format for OpenAI compatibility...")
+    private fun convertOpusToWebM(inputFile: File): File {
+        println("Converting ${inputFile.name} to WebM format for OpenAI compatibility...")
         println("CRITICAL: This conversion is required for gpt-4o-mini-transcribe - raw Opus files are NOT supported")
         
-        val outputFile = File(inputFile.parent, inputFile.nameWithoutExtension + "_converted.wav")
+        val outputFile = File(inputFile.parent, inputFile.nameWithoutExtension + "_converted.webm")
         
         // Check if file has Opus magic headers for better diagnostics
         val hasOpusMagic = isOpusFileByMagic(inputFile)
@@ -76,14 +73,14 @@ class TranscriptionRepository(private val context: Context) {
             println("WARNING: File does not appear to have valid Opus headers. Conversion may fail.")
         }
         
-        println("Using Android MediaCodec for Opus to WAV conversion")
+        println("Using Android MediaCodec for Opus to WebM conversion")
         println("Input file: ${inputFile.absolutePath}")
         println("Output file: ${outputFile.absolutePath}")
         println("Input file size: ${inputFile.length()} bytes")
         
         try {
-            // Use the MediaCodec implementation for WAV conversion
-            return convertOpusToWavMediaCodec(inputFile)
+            // Use the MediaCodec implementation for WebM conversion
+            return convertOpusToWebMMediaCodec(inputFile)
             
         } catch (e: Exception) {
             println("MediaCodec conversion failed: ${e.message}")
@@ -92,29 +89,28 @@ class TranscriptionRepository(private val context: Context) {
             if (outputFile.exists()) outputFile.delete()
             
             println("CONVERSION FAILED: gpt-4o-mini-transcribe requires actual format conversion, not raw Opus files")
-            throw Exception("Opus to WAV conversion failed: ${e.message}. Raw Opus files cannot be sent to gpt-4o-mini-transcribe. Try using whisper-1 model instead.")
+            throw Exception("Opus to WebM conversion failed: ${e.message}. Raw Opus files cannot be sent to gpt-4o-mini-transcribe. Try using whisper-1 model instead.")
         }
     }
     
     /**
-     * Converts Opus/OGG files to WAV format using Android's MediaCodec API.
-     * This is the primary conversion method used for all Opus/OGG files.
-     * WAV is uncompressed PCM audio - simple and universally supported.
+     * Converts Opus/OGG files to WebM format using Android's MediaCodec API.
+     * This method remuxes Opus audio from OGG container to WebM container without re-encoding.
+     * WebM is a more modern container format that's better supported by web APIs.
      *
      * @param inputFile The input Opus/OGG file
-     * @return The converted WAV file
+     * @return The converted WebM file
      * @throws Exception If MediaCodec conversion fails (missing codec, invalid file format, etc.)
      */
-    private fun convertOpusToWavMediaCodec(inputFile: File): File {
-        println("Starting MediaCodec conversion from Opus to WAV...")
-        val outputFile = File(inputFile.parent, inputFile.nameWithoutExtension + "_converted.wav")
+    private fun convertOpusToWebMMediaCodec(inputFile: File): File {
+        println("Starting MediaCodec conversion from Opus to WebM...")
+        val outputFile = File(inputFile.parent, inputFile.nameWithoutExtension + "_converted.webm")
         
         try {
-            // Check if we have an Opus decoder available
+            // Check if we have WebM muxer available
             val codecList = android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS)
             val codecs = codecList.codecInfos
             var hasOpusDecoder = false
-            var opusDecoderName = ""
             
             for (codec in codecs) {
                 if (codec.isEncoder) continue
@@ -122,25 +118,16 @@ class TranscriptionRepository(private val context: Context) {
                     if (type == "audio/opus") {
                         println("Found Opus decoder: ${codec.name}")
                         hasOpusDecoder = true
-                        opusDecoderName = codec.name
-                        break
                     }
                 }
-                if (hasOpusDecoder) break
             }
             
             if (!hasOpusDecoder) {
                 println("ERROR: No Opus decoder found in MediaCodec")
                 throw Exception("Device does not support Opus decoding through MediaCodec. Please use whisper-1 model for Opus files.")
-            } else {
-                println("Using MediaCodec Opus decoder: $opusDecoderName")
             }
             
-            // Check if file is a valid Opus file by examining magic bytes
-            val hasOpusMagic = isOpusFileByMagic(inputFile)
-            println("File has Opus magic headers: $hasOpusMagic")
-            
-            // Set up extractor
+            // Set up extractor for input file
             val extractor = android.media.MediaExtractor()
             try {
                 val uri = android.net.Uri.fromFile(inputFile)
@@ -148,18 +135,12 @@ class TranscriptionRepository(private val context: Context) {
                 println("MediaExtractor initialized successfully")
             } catch (e: Exception) {
                 println("MediaExtractor failed to open the file: ${e.message}")
-                if (hasOpusMagic) {
-                    println("File has Opus magic but MediaExtractor couldn't open it")
-                    println("This likely means the file is Opus but your device lacks the proper codec")
-                    throw Exception("Device cannot process this Opus file. Please use whisper-1 model instead.")
-                } else {
-                    throw Exception("Not a valid Opus file or missing codec: ${e.message}")
-                }
+                throw Exception("Cannot process this Opus file. Please use whisper-1 model instead.")
             }
             
             // Find the audio track
             var audioTrackIndex = -1
-            var trackMimeType = ""
+            var inputFormat: android.media.MediaFormat? = null
             
             for (i in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(i)
@@ -169,201 +150,85 @@ class TranscriptionRepository(private val context: Context) {
                 if (mime?.startsWith("audio/") == true) {
                     extractor.selectTrack(i)
                     audioTrackIndex = i
-                    trackMimeType = mime
+                    inputFormat = format
                     println("Selected audio track: $mime")
                     break
                 }
             }
             
-            if (audioTrackIndex == -1) {
-                if (hasOpusMagic) {
-                    println("File has Opus magic headers but MediaExtractor found no audio tracks")
-                    println("This means your device doesn't have the proper codec to decode this Opus file")
-                    throw Exception("Device cannot decode this Opus file. Please use whisper-1 model instead.")
-                } else {
-                    throw Exception("No audio track found in the input file - may not be a valid audio file")
-                }
+            if (audioTrackIndex == -1 || inputFormat == null) {
+                throw Exception("No audio track found in the input file")
             }
             
-            // Get source format
-            val inputFormat = extractor.getTrackFormat(audioTrackIndex)
-            val inputMime = inputFormat.getString(android.media.MediaFormat.KEY_MIME)
-            val sampleRate = inputFormat.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE)
-            val channelCount = inputFormat.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
-            val duration = if (inputFormat.containsKey(android.media.MediaFormat.KEY_DURATION)) 
-                inputFormat.getLong(android.media.MediaFormat.KEY_DURATION) else 0
+            // Set up MediaMuxer for WebM output
+            val muxer = android.media.MediaMuxer(outputFile.absolutePath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM)
             
-            println("Input audio: $inputMime, $sampleRate Hz, $channelCount channels, duration: $duration μs")
+            // Create output format for WebM
+            val outputFormat = android.media.MediaFormat.createAudioFormat("audio/opus", 
+                inputFormat.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE),
+                inputFormat.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT))
             
-            // Create decoder
-            val decoder = android.media.MediaCodec.createDecoderByType(inputMime!!)
-            decoder.configure(inputFormat, null, null, 0)
-            decoder.start()
+            // Copy codec-specific data if available
+            if (inputFormat.containsKey("csd-0")) {
+                outputFormat.setByteBuffer("csd-0", inputFormat.getByteBuffer("csd-0"))
+            }
+            if (inputFormat.containsKey("csd-1")) {
+                outputFormat.setByteBuffer("csd-1", inputFormat.getByteBuffer("csd-1"))
+            }
             
-            // Set up for WAV file writing
-            val wavOutputStream = java.io.FileOutputStream(outputFile)
-            val pcmData = mutableListOf<ByteArray>()
+            val trackIndex = muxer.addTrack(outputFormat)
+            muxer.start()
             
-            // Set up buffers
+            // Copy samples from input to output
             val bufferInfo = android.media.MediaCodec.BufferInfo()
-            val TIMEOUT_US = 10000L
-            var sawInputEOS = false
-            var sawOutputEOS = false
+            val buffer = java.nio.ByteBuffer.allocate(1024 * 1024) // 1MB buffer
             
             try {
-                while (!sawOutputEOS) {
-                    // Handle decoder input
-                    if (!sawInputEOS) {
-                        val inputBufferId = decoder.dequeueInputBuffer(TIMEOUT_US)
-                        if (inputBufferId >= 0) {
-                            val inputBuffer = decoder.getInputBuffer(inputBufferId)!!
-                            val sampleSize = extractor.readSampleData(inputBuffer, 0)
-                            
-                            if (sampleSize < 0) {
-                                decoder.queueInputBuffer(inputBufferId, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                                sawInputEOS = true
-                                println("Decoder: End of stream reached")
-                            } else {
-                                val presentationTimeUs = extractor.sampleTime
-                                decoder.queueInputBuffer(inputBufferId, 0, sampleSize, presentationTimeUs, 0)
-                                extractor.advance()
-                            }
-                        }
-                    }
+                while (true) {
+                    val sampleSize = extractor.readSampleData(buffer, 0)
+                    if (sampleSize < 0) break
                     
-                    // Handle decoder output
-                    val outputBufferId = decoder.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
-                    if (outputBufferId >= 0) {
-                        val decoderOutputBuffer = decoder.getOutputBuffer(outputBufferId)!!
-                        
-                        if (bufferInfo.size > 0) {
-                            // Copy PCM data
-                            val pcmBytes = ByteArray(bufferInfo.size)
-                            decoderOutputBuffer.position(bufferInfo.offset)
-                            decoderOutputBuffer.get(pcmBytes, 0, bufferInfo.size)
-                            pcmData.add(pcmBytes)
-                        }
-                        
-                        decoder.releaseOutputBuffer(outputBufferId, false)
-                        
-                        if ((bufferInfo.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                            sawOutputEOS = true
-                            println("Decoder: End of stream reached")
-                        }
-                    } else if (outputBufferId == android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                        val newFormat = decoder.outputFormat
-                        println("Decoder output format changed: $newFormat")
-                    }
+                    bufferInfo.offset = 0
+                    bufferInfo.size = sampleSize
+                    bufferInfo.presentationTimeUs = extractor.sampleTime
+                    bufferInfo.flags = 0 // Reset flags for MediaCodec compatibility
+                    
+                    muxer.writeSampleData(trackIndex, buffer, bufferInfo)
+                    extractor.advance()
                 }
                 
-                println("Decoding complete, writing WAV file...")
+                println("WebM remuxing complete")
                 
-                // Calculate total PCM data size
-                val totalPcmSize = pcmData.sumOf { it.size }
-                
-                // Write WAV header
-                writeWavHeader(wavOutputStream, sampleRate, channelCount.toShort(), totalPcmSize)
-                
-                // Write PCM data
-                for (pcmChunk in pcmData) {
-                    wavOutputStream.write(pcmChunk)
-                }
-                
-                wavOutputStream.close()
-                println("WAV file written successfully")
-                
-            } catch (e: Exception) {
-                println("Error during MediaCodec conversion: ${e.message}")
-                throw e
             } finally {
-                // Release resources
-                decoder.stop()
-                decoder.release()
+                muxer.stop()
+                muxer.release()
                 extractor.release()
-                try { wavOutputStream.close() } catch (e: Exception) { }
             }
             
             if (outputFile.exists() && outputFile.length() > 0) {
-                println("MediaCodec conversion successful - output size: ${outputFile.length()} bytes")
+                println("WebM conversion successful - output size: ${outputFile.length()} bytes")
                 return outputFile
             } else {
-                throw Exception("MediaCodec conversion failed - output file is empty or missing")
+                throw Exception("WebM conversion failed - output file is empty or missing")
             }
+            
         } catch (e: Exception) {
             // Clean up
             if (outputFile.exists()) outputFile.delete()
-            throw Exception("MediaCodec WAV conversion failed: ${e.message}")
+            throw Exception("WebM conversion failed: ${e.message}")
         }
     }
     
     /**
-     * Writes a WAV file header for PCM audio data.
-     */
-    private fun writeWavHeader(outputStream: java.io.FileOutputStream, sampleRate: Int, channels: Short, pcmDataSize: Int) {
-        val byteRate = sampleRate * channels * 2 // 16-bit samples
-        val blockAlign = (channels * 2).toShort()
-        val fileSize = 36 + pcmDataSize
-        
-        // WAV header
-        outputStream.write("RIFF".toByteArray())
-        outputStream.write(intToByteArray(fileSize))
-        outputStream.write("WAVE".toByteArray())
-        
-        // Format chunk
-        outputStream.write("fmt ".toByteArray())
-        outputStream.write(intToByteArray(16)) // Chunk size
-        outputStream.write(shortToByteArray(1)) // Audio format (PCM)
-        outputStream.write(shortToByteArray(channels))
-        outputStream.write(intToByteArray(sampleRate))
-        outputStream.write(intToByteArray(byteRate))
-        outputStream.write(shortToByteArray(blockAlign))
-        outputStream.write(shortToByteArray(16)) // Bits per sample
-        
-        // Data chunk
-        outputStream.write("data".toByteArray())
-        outputStream.write(intToByteArray(pcmDataSize))
-    }
-    
-    private fun intToByteArray(value: Int): ByteArray {
-        return byteArrayOf(
-            (value and 0xFF).toByte(),
-            ((value shr 8) and 0xFF).toByte(),
-            ((value shr 16) and 0xFF).toByte(),
-            ((value shr 24) and 0xFF).toByte()
-        )
-    }
-    
-    private fun shortToByteArray(value: Short): ByteArray {
-        return byteArrayOf(
-            (value.toInt() and 0xFF).toByte(),
-            ((value.toInt() shr 8) and 0xFF).toByte()
-        )
-    }
-    
-    /**
-     * Logs all available audio codecs and checks for:
-     * 1. AAC (audio/mp4a-latm) encoder support
-     * 2. Opus (audio/opus) decoder support
+     * Logs all available audio codecs and checks for WebM/Opus support.
      * 
-     * Returns a pair of booleans (hasAacEncoder, hasOpusDecoder)
+     * Returns a pair of booleans (hasWebMSupport, hasOpusDecoder)
      */
     private fun checkAndLogAudioCodecs(): Pair<Boolean, Boolean> {
         val codecList = android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS)
         val codecs = codecList.codecInfos
-        var foundAac = false
+        var foundWebMSupport = false
         var foundOpusDecoder = false
-        
-        println("=== Available Audio Encoders ===")
-        for (codec in codecs) {
-            if (!codec.isEncoder) continue
-            for (type in codec.supportedTypes) {
-                if (type.startsWith("audio/")) {
-                    println("Encoder: ${codec.name}, Type: $type")
-                    if (type == "audio/mp4a-latm") foundAac = true
-                }
-            }
-        }
-        println("=== End of Audio Encoder List ===")
         
         println("=== Available Audio Decoders ===")
         for (codec in codecs) {
@@ -380,7 +245,21 @@ class TranscriptionRepository(private val context: Context) {
         }
         println("=== End of Audio Decoder List ===")
         
-        return Pair(foundAac, foundOpusDecoder)
+        // Check for WebM support through MediaMuxer capabilities
+        try {
+            val formats = android.media.MediaMuxer.OutputFormat::class.java.fields
+            for (field in formats) {
+                if (field.name.contains("WEBM", ignoreCase = true)) {
+                    foundWebMSupport = true
+                    println("WebM output format supported")
+                    break
+                }
+            }
+        } catch (e: Exception) {
+            println("Could not check WebM support: ${e.message}")
+        }
+        
+        return Pair(foundWebMSupport, foundOpusDecoder)
     }
 
     suspend fun transcribeFile(file: File, onProgress: ((String) -> Unit)? = null): String {
@@ -403,9 +282,9 @@ class TranscriptionRepository(private val context: Context) {
 
         if (needsTranscoding) {
             // Log available encoders and decoders for informational purposes
-            val (hasAac, hasOpusDecoder) = checkAndLogAudioCodecs()
-            println("Device AAC encoder available: $hasAac (not used - converting to WAV instead)")
-            println("Device Opus decoder available: $hasOpusDecoder (needed for MediaCodec conversion)")
+            val (hasWebMSupport, hasOpusDecoder) = checkAndLogAudioCodecs()
+            println("Device WebM support available: $hasWebMSupport (needed for efficient conversion)")
+            println("Device Opus decoder available: $hasOpusDecoder (needed for conversion)")
         }
 
         onProgress?.invoke("Analyzing file...")
@@ -419,11 +298,11 @@ class TranscriptionRepository(private val context: Context) {
         println("=========================")
         
         val (fileToUpload, cleanupNeeded) = if (needsTranscoding) {
-            // Convert to WAV for gpt-4 model compatibility (uncompressed but universally supported by OpenAI)
-            onProgress?.invoke("Converting ${originalName.substringAfterLast(".")} to WAV...")
-            println("TranscriptionRepository: Converting $originalName to WAV for $model")
+            // Convert to WebM for gpt-4 model compatibility (lossy compression, smaller file size)
+            onProgress?.invoke("Converting ${originalName.substringAfterLast(".")} to WebM...")
+            println("TranscriptionRepository: Converting $originalName to WebM for $model")
             try {
-                val convertedFile = convertOpusToAac(file)
+                val convertedFile = convertOpusToWebM(file)
                 println("TranscriptionRepository: Conversion successful, output: ${convertedFile.name}")
                 convertedFile to true
             } catch (e: Exception) {
@@ -434,8 +313,8 @@ class TranscriptionRepository(private val context: Context) {
                         "Your device doesn't support Opus audio decoding. Use whisper-1 model for Opus files, or convert to WAV/MP3 first."
                     e.message?.contains("Not a valid Opus file") == true ->
                         "The file doesn't appear to be a valid Opus file. Try using whisper-1 model instead or convert to WAV/MP3 first."
-                    e.message?.contains("Opus to WAV conversion failed") == true -> 
-                        e.message!! // Use the detailed message from convertOpusToAac
+                    e.message?.contains("WebM conversion failed") == true -> 
+                        e.message!! // Use the detailed message from convertOpusToWebM
                     else -> 
                         "Opus file conversion failed for gpt-4o-mini-transcribe. Use whisper-1 model for Opus files, or convert your file to WAV/MP3 format first."
                 }
@@ -452,10 +331,10 @@ class TranscriptionRepository(private val context: Context) {
         // Determine MIME type and filename based on model and conversion
         val (finalMimeType, finalFileName) = when {
             needsTranscoding -> {
-                // We're now outputting WAV files (uncompressed PCM, OpenAI compatible)
-                if (fileToUpload.name.endsWith(".wav", ignoreCase = true)) {
-                    // WAV file - use audio/wav MIME type
-                    "audio/wav" to fileToUpload.name
+                // We're now outputting WebM files (efficient Opus in WebM container)
+                if (fileToUpload.name.endsWith(".webm", ignoreCase = true)) {
+                    // WebM file - use audio/webm MIME type
+                    "audio/webm" to fileToUpload.name
                 } else {
                     // Fallback for other converted formats
                     "audio/mpeg" to fileToUpload.name
@@ -470,8 +349,7 @@ class TranscriptionRepository(private val context: Context) {
                 val mimeType = when {
                     fileToUpload.name.endsWith(".aac", ignoreCase = true) -> "audio/aac"
                     fileToUpload.name.endsWith(".m4a", ignoreCase = true) -> "audio/mp4"
-                        fileToUpload.name.endsWith(".wav", ignoreCase = true) -> "audio/wav"
-                    fileToUpload.name.endsWith(".m4a", ignoreCase = true) -> "audio/mp4"
+                    fileToUpload.name.endsWith(".wav", ignoreCase = true) -> "audio/wav"
                     fileToUpload.name.endsWith(".webm", ignoreCase = true) -> "audio/webm"
                     else -> java.net.URLConnection.guessContentTypeFromName(fileToUpload.name)
                         ?: context.contentResolver.getType(android.net.Uri.fromFile(fileToUpload))
