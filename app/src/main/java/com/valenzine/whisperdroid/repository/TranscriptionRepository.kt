@@ -25,14 +25,6 @@ class TranscriptionRepository(private val context: Context) {
     private val llmApi: LlmApi
 
     init {
-        // Load native library for Opus decoding
-        try {
-            System.loadLibrary("opus_jni")
-            println("Successfully loaded opus_jni native library")
-        } catch (e: UnsatisfiedLinkError) {
-            println("Failed to load opus_jni native library: ${e.message}")
-        }
-
         // Add logging interceptor for debugging HTTP requests
         val logging = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }
         val client = OkHttpClient.Builder()
@@ -47,10 +39,6 @@ class TranscriptionRepository(private val context: Context) {
         transcriptionApi = retrofit.create(TranscriptionApi::class.java)
         llmApi = retrofit.create(LlmApi::class.java)
     }
-
-    // Native method declarations for Opus conversion
-    private external fun decodeOpusToPCM(inputPath: String, outputPath: String): Boolean
-
 
     /**
      * Converts Opus/OGG files to WebM format for compatibility with OpenAI's gpt-4o-mini-transcribe API.
@@ -273,7 +261,7 @@ class TranscriptionRepository(private val context: Context) {
         println("File exists: ${file.exists()}")
         println("File size: ${file.length()}")
         
-        // Log available audio encoders and check for AAC support if transcoding is needed
+        // Log available audio encoders and check for WebM support if transcoding is needed
         val originalName = file.name
         val isOpus = originalName.endsWith(".opus", ignoreCase = true)
         val isOgg = originalName.endsWith(".ogg", ignoreCase = true)
