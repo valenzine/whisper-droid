@@ -73,33 +73,57 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Show loading indicator for transcription
-        if (uiState is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Loading) {
-            CircularProgressIndicator()
-            Text("Transcribing audio...")
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        // Show loading indicator for formatting
-        if (uiState is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.FormattingText) {
-            CircularProgressIndicator()
-            Text("Formatting text...")
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        // Show error message
-        if (uiState is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Error) {
-            val errorMessage = (uiState as com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Error).message
-            LaunchedEffect(snackbarHostState, errorMessage) {
-                snackbarHostState.showSnackbar("Error: $errorMessage")
+        // Handle different UI states with better feedback
+        when (val currentState = uiState) {
+            is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.PreparingFile -> {
+                CircularProgressIndicator()
+                Text("Analyzing ${currentState.fileName}...")
+                Text("File size: ${formatFileSize(currentState.fileSize)}")
+                Spacer(modifier = Modifier.height(16.dp))
             }
-        }
-
-        // Show success message
-        if (uiState is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Success) {
-            val transcriptionText = (uiState as com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Success).transcription
-            LaunchedEffect(snackbarHostState, transcriptionText) {
-                snackbarHostState.showSnackbar("Transcription complete!")
+            is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.TranscodingFile -> {
+                CircularProgressIndicator()
+                Text("Converting ${currentState.fileName}")
+                Text("From ${currentState.fromFormat} to ${currentState.toFormat}...")
+                Text("This may take a moment...")
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.UploadingFile -> {
+                CircularProgressIndicator()
+                Text("Uploading ${currentState.fileName}")
+                Text("Using model: ${currentState.model}")
+                Text("Processing with OpenAI...")
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Loading -> {
+                CircularProgressIndicator()
+                Text("Transcribing audio...")
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.FormattingText -> {
+                CircularProgressIndicator()
+                Text("Formatting text...")
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Error -> {
+                // Use LaunchedEffect to show the snackbar and then reset the state.
+                // The key ensures this runs only once per error instance.
+                LaunchedEffect(snackbarHostState, currentState) {
+                    snackbarHostState.showSnackbar(
+                        message = currentState.message,
+                        actionLabel = "Dismiss"
+                    )
+                    // After the snackbar is dismissed (by action or timeout/swipe), reset the state.
+                    viewModel.resetState()
+                }
+            }
+            is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Success -> {
+                LaunchedEffect(snackbarHostState, currentState.transcription) {
+                    snackbarHostState.showSnackbar("Transcription complete!")
+                }
+            }
+            else -> {
+                // Idle state - no special handling needed
             }
         }
 
@@ -138,9 +162,35 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
 // Helper function to process audio files from URI
 private fun processAudioFile(uri: Uri, context: android.content.Context, viewModel: TranscriptionViewModel) {
     val inputStream = context.contentResolver.openInputStream(uri)
-    val file = File(context.cacheDir, "temp_audio_file")
+    
+    // Get the original filename from the URI to preserve the extension
+    val originalFileName = try {
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            cursor.moveToFirst()
+            cursor.getString(nameIndex)
+        }
+    } catch (e: Exception) {
+        null
+    }
+    
+    // Create temp file with preserved extension or fallback to generic name
+    val fileName = originalFileName ?: "temp_audio_file"
+    val file = File(context.cacheDir, fileName)
+    
     inputStream?.let {
         file.writeBytes(it.readBytes())
         viewModel.transcribeFile(file)
+    }
+}
+
+// Helper function to format file size
+private fun formatFileSize(bytes: Long): String {
+    val kb = bytes / 1024.0
+    val mb = kb / 1024.0
+    return when {
+        mb >= 1 -> String.format("%.1f MB", mb)
+        kb >= 1 -> String.format("%.1f KB", kb)
+        else -> "$bytes bytes"
     }
 }
