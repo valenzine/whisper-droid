@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.1] - 2025-07-07
+### Changed
+- Improved language selection: Language parameter is now passed through the UI, ViewModel, and Repository, allowing users to select "Automatic" or a specific language for transcription.
+- Updated `TranscriptionRepository` and `TranscriptionApi` to support an optional language parameter for the Whisper API.
+- Refactored `MainScreen` to include a language dropdown and properly pass the selected language to the transcription process.
+- Updated `TranscriptionViewModel` to accept and forward the language parameter.
+- Minor UI and code structure improvements for better maintainability.
+
+### Fixed
+- Fixed build errors related to missing or incorrect function parameters and imports.
+- Ensured that if no language is selected, the app defaults to automatic language detection.
+
 ## [0.1.0] - 2025-07-07
 ### Added
 - First proof-of-concept version.
