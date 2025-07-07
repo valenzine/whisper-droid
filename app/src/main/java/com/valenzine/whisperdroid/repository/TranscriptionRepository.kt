@@ -250,7 +250,7 @@ class TranscriptionRepository(private val context: Context) {
         return Pair(foundWebMSupport, foundOpusDecoder)
     }
 
-    suspend fun transcribeFile(file: File, onProgress: ((String) -> Unit)? = null): String {
+    suspend fun transcribeFile(file: File, language: String? = null, onProgress: ((String) -> Unit)? = null): String {
         val apiKey = settingsRepository.transcriptionApiKeyFlow.first()
         val model = settingsRepository.transcriptionModelFlow.first()
         
@@ -351,7 +351,10 @@ class TranscriptionRepository(private val context: Context) {
         val requestFile = fileToUpload.asRequestBody(finalMimeType.toMediaTypeOrNull())
         val filePart = MultipartBody.Part.createFormData("file", finalFileName, requestFile)
         val modelRequestBody = model.toRequestBody("text/plain".toMediaTypeOrNull())
-        
+        val languagePart = language?.takeIf { it.isNotBlank() }?.let {
+            it.toRequestBody("text/plain".toMediaTypeOrNull())
+        }
+
         // Log debug information
         println("TranscriptionRepository: Using model: $model")
         println("TranscriptionRepository: Original filename: $originalName")
@@ -359,14 +362,15 @@ class TranscriptionRepository(private val context: Context) {
         println("TranscriptionRepository: MIME type: $finalMimeType")
         println("TranscriptionRepository: Needs transcoding: $needsTranscoding")
         println("TranscriptionRepository: File size: ${fileToUpload.length()} bytes")
-        
+
         onProgress?.invoke("Uploading to ${model}...")
-        
+
         val response = try {
             transcriptionApi.transcribe(
                 authorization = "Bearer $apiKey",
                 file = filePart,
-                model = modelRequestBody
+                model = modelRequestBody,
+                language = languagePart
             )
         } catch (e: retrofit2.HttpException) {
             val errorBody = e.response()?.errorBody()?.string()
@@ -399,7 +403,7 @@ class TranscriptionRepository(private val context: Context) {
                 fileToUpload.delete()
             }
         }
-        
+
         return response.text
     }
 

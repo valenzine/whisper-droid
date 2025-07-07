@@ -2,22 +2,11 @@ package com.valenzine.whisperdroid.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.* 
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -29,6 +18,7 @@ import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModelFactory
 import java.io.File
 import android.net.Uri
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
     val context = LocalContext.current
@@ -39,16 +29,27 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Language selection state
+    val languageOptions = listOf("Automatic", "English", "Spanish", "Italian")
+    val languageCodes = mapOf(
+        "Automatic" to null,
+        "English" to "en",
+        "Spanish" to "es",
+        "Italian" to "it"
+    )
+    var languageDropdownExpanded by remember { mutableStateOf(false) }
+    var selectedLanguage by remember { mutableStateOf("Automatic") }
+
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
         it?.let { uri ->
-            processAudioFile(uri, context, viewModel)
+            processAudioFile(uri, context, viewModel, languageCodes[selectedLanguage])
         }
     }
 
     // Process shared audio file when the screen loads
     LaunchedEffect(sharedAudioUri) {
         sharedAudioUri?.let { uri ->
-            processAudioFile(uri, context, viewModel)
+            processAudioFile(uri, context, viewModel, languageCodes[selectedLanguage])
         }
     }
 
@@ -67,6 +68,42 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
                 Icon(Icons.Default.Settings, contentDescription = "Settings")
             }
         }
+
+        // Language selection dropdown
+        ExposedDropdownMenuBox(
+            expanded = languageDropdownExpanded,
+            onExpandedChange = { languageDropdownExpanded = !languageDropdownExpanded }
+        ) {
+            TextField(
+                value = selectedLanguage,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Language") },
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(
+                        expanded = languageDropdownExpanded
+                    )
+                },
+                modifier = Modifier.menuAnchor().fillMaxWidth()
+            )
+            ExposedDropdownMenu(
+                expanded = languageDropdownExpanded,
+                onDismissRequest = { languageDropdownExpanded = false }
+            ) {
+                languageOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            selectedLanguage = option
+                            languageDropdownExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         Button(onClick = { launcher.launch("audio/*") }) {
             Text("Select Audio File")
         }
@@ -160,7 +197,7 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
 }
 
 // Helper function to process audio files from URI
-private fun processAudioFile(uri: Uri, context: android.content.Context, viewModel: TranscriptionViewModel) {
+private fun processAudioFile(uri: Uri, context: android.content.Context, viewModel: TranscriptionViewModel, languageCode: String?) {
     val inputStream = context.contentResolver.openInputStream(uri)
     
     // Get the original filename from the URI to preserve the extension
@@ -180,7 +217,7 @@ private fun processAudioFile(uri: Uri, context: android.content.Context, viewMod
     
     inputStream?.let {
         file.writeBytes(it.readBytes())
-        viewModel.transcribeFile(file)
+        viewModel.transcribeFile(file, languageCode)
     }
 }
 

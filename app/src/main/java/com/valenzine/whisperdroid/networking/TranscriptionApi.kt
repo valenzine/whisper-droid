@@ -13,7 +13,8 @@ interface TranscriptionApi {
     suspend fun transcribe(
         @Header("Authorization") authorization: String,
         @Part file: MultipartBody.Part,
-        @Part("model") model: RequestBody
+        @Part("model") model: RequestBody,
+        @Part("language") language: RequestBody? = null
     ): TranscriptionResponse
 }
 
