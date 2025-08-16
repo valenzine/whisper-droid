@@ -2,7 +2,11 @@ package com.valenzine.whisperdroid.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -164,35 +168,86 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
             }
         }
 
-        TextField(
-            value = transcription,
-            onValueChange = { },
-            label = { Text("Transcription") },
+        // Tabs for switching between transcription and formatted text
+        var activeTabIndex by remember { mutableStateOf(0) }
+        val tabs = listOf("Transcription", "Formatted")
+
+        // Separate height state per tab so the user can resize each independently
+        var transcriptionHeight by remember { mutableStateOf(150.dp) }
+        var formattedHeight by remember { mutableStateOf(150.dp) }
+
+        val density = androidx.compose.ui.platform.LocalDensity.current
+
+        TabRow(selectedTabIndex = activeTabIndex) {
+            tabs.forEachIndexed { index, title ->
+                Tab(selected = activeTabIndex == index, onClick = { activeTabIndex = index }) {
+                    Text(text = title, modifier = Modifier.padding(12.dp))
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Content area (only one tab visible at a time). Each tab remembers its own height.
+        if (activeTabIndex == 0) {
+            TextField(
+                value = transcription,
+                onValueChange = { },
+                label = { Text("Transcription") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(transcriptionHeight),
+                maxLines = Int.MAX_VALUE,
+                singleLine = false
+            )
+        } else {
+            TextField(
+                value = formattedText,
+                onValueChange = { },
+                label = { Text("Formatted Text") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(formattedHeight),
+                maxLines = Int.MAX_VALUE,
+                singleLine = false
+            )
+        }
+
+        // Drag handle that adjusts the height of the currently visible tab's area
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 56.dp, max = 150.dp),
-            maxLines = 10,
-            singleLine = false
-        )
+                .height(10.dp)
+                .padding(vertical = 4.dp)
+                .pointerInput(activeTabIndex) {
+                    detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        val deltaDp = with(density) { dragAmount.y.toDp() }
+                        if (activeTabIndex == 0) {
+                            transcriptionHeight = (transcriptionHeight + deltaDp).coerceIn(80.dp, 800.dp)
+                        } else {
+                            formattedHeight = (formattedHeight + deltaDp).coerceIn(80.dp, 800.dp)
+                        }
+                    }
+                }
+                .background(Color.Transparent),
+            contentAlignment = Alignment.Center
+        ) {
+            // visible affordance for the drag handle
+            Box(
+                modifier = Modifier
+                    .width(80.dp)
+                    .height(4.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+            )
+        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
+        // Keep the format button available below the tabs
         Button(onClick = { viewModel.formatText() }) {
             Text("Format Text")
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        TextField(
-            value = formattedText,
-            onValueChange = { },
-            label = { Text("Formatted Text") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp, max = 150.dp),
-            maxLines = 10,
-            singleLine = false
-        )
     }
 }
 
