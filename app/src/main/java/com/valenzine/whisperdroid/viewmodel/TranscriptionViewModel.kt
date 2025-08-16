@@ -40,17 +40,17 @@ class TranscriptionViewModel(
         _formattedText.value = ""
     }
 
-    fun transcribeFile(file: File) {
+    fun transcribeFile(file: File, language: String? = null) {
         viewModelScope.launch {
             try {
                 // Prepare file info
                 val fileName = file.name
                 val fileSize = file.length()
                 val fileExtension = file.extension.lowercase()
-                
+
                 _uiState.value = TranscriptionUiState.PreparingFile(fileName, fileSize)
-                
-                val result = repository.transcribeFile(file) { progressMessage ->
+
+                val result = repository.transcribeFile(file, language) { progressMessage ->
                     when {
                         progressMessage.contains("Analyzing", ignoreCase = true) -> {
                             _uiState.value = TranscriptionUiState.PreparingFile(fileName, fileSize)
@@ -72,7 +72,7 @@ class TranscriptionViewModel(
                         }
                     }
                 }
-                
+
                 _transcription.value = result
                 _uiState.value = TranscriptionUiState.Success(result)
             } catch (e: Exception) {
@@ -88,8 +88,8 @@ class TranscriptionViewModel(
                         val settingsRepo = com.valenzine.whisperdroid.repository.SettingsRepository(repository.getContext())
                         val model = settingsRepo.transcriptionModelFlow.first()
                         val fileExtension = file.extension.lowercase()
-                        
-                        if ((fileExtension == "opus" || fileExtension == "ogg") && model == "gpt-4o-mini-transcribe") {
+
+                        if ((fileExtension == "opus" || fileExtension == "ogg") && (model == "gpt-4o-mini-transcribe" || model == "gpt-4o-transcribe")) {
                             "Opus/OGG files are not supported by $model. Try using whisper-1 model instead, or convert your file to MP3/AAC format first."
                         } else {
                             "File format not supported or file corrupted. Supported formats: MP3, AAC, WAV, FLAC, OGG (whisper-1 only)"

@@ -9,13 +9,7 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(private val repository: SettingsRepository) : ViewModel() {
 
-    val transcriptionApiKey = repository.transcriptionApiKeyFlow.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ""
-    )
-
-    val llmApiKey = repository.llmApiKeyFlow.stateIn(
+    val apiKey = repository.apiKeyFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = ""
@@ -33,15 +27,9 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         initialValue = "whisper-1"
     )
 
-    fun saveTranscriptionApiKey(apiKey: String) {
+    fun saveApiKey(key: String) {
         viewModelScope.launch {
-            repository.saveTranscriptionApiKey(apiKey)
-        }
-    }
-
-    fun saveLlmApiKey(apiKey: String) {
-        viewModelScope.launch {
-            repository.saveLlmApiKey(apiKey)
+            repository.saveApiKey(key)
         }
     }
 

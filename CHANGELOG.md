@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.2] - 2025-08-16
+### Added
+- Support for the `gpt-4o-transcribe` model in addition to existing transcription models. 
+- Copy-to-clipboard action for transcription and formatted text.
+- Resizable tabbed text areas on the main screen (drag to resize transcription/formatted panes).
+
+### Changed
+- Unified API key storage and usage (single API key field in Settings). Legacy key fields removed and consolidated.
+- Partial password masking for the API key field (first N characters visible, rest masked) to improve UX while avoiding accidental key exposure.
+- When requesting text formatting the UI now switches automatically to the "Formatted" tab.
+- `MainScreen` and `SettingsScreen` UI refactor for improved layout and usability, including a top app bar with back navigation in Settings.
+- Updated Android Gradle Plugin to 8.11.1.
+
+### Fixed
+- Various UI/UX tweaks and minor bug fixes related to tab switching, state handling, and error messaging in transcription/formatting flows.
+
+## [0.1.1] - 2025-07-07
+### Changed
+- Improved language selection: Language parameter is now passed through the UI, ViewModel, and Repository, allowing users to select "Automatic" or a specific language for transcription.
+- Updated `TranscriptionRepository` and `TranscriptionApi` to support an optional language parameter for the Whisper API.
+- Refactored `MainScreen` to include a language dropdown and properly pass the selected language to the transcription process.
+- Updated `TranscriptionViewModel` to accept and forward the language parameter.
+- Minor UI and code structure improvements for better maintainability.
+
+### Fixed
+- Fixed build errors related to missing or incorrect function parameters and imports.
+- Ensured that if no language is selected, the app defaults to automatic language detection.
+
 ## [0.1.0] - 2025-07-07
 ### Added
 - First proof-of-concept version.

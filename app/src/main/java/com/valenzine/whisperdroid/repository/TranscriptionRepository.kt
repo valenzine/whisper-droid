@@ -250,8 +250,8 @@ class TranscriptionRepository(private val context: Context) {
         return Pair(foundWebMSupport, foundOpusDecoder)
     }
 
-    suspend fun transcribeFile(file: File, onProgress: ((String) -> Unit)? = null): String {
-        val apiKey = settingsRepository.transcriptionApiKeyFlow.first()
+    suspend fun transcribeFile(file: File, language: String? = null, onProgress: ((String) -> Unit)? = null): String {
+    val apiKey = settingsRepository.apiKeyFlow.first()
         val model = settingsRepository.transcriptionModelFlow.first()
         
         println("=== TranscriptionRepository Debug ===")
@@ -265,7 +265,7 @@ class TranscriptionRepository(private val context: Context) {
         val originalName = file.name
         val isOpus = originalName.endsWith(".opus", ignoreCase = true)
         val isOgg = originalName.endsWith(".ogg", ignoreCase = true)
-        val isGpt4Mini = model == "gpt-4o-mini-transcribe"
+        val isGpt4Mini = (model == "gpt-4o-mini-transcribe" || model == "gpt-4o-transcribe")
         val needsTranscoding = isGpt4Mini && (isOpus || isOgg)
 
         if (needsTranscoding) {
@@ -351,7 +351,10 @@ class TranscriptionRepository(private val context: Context) {
         val requestFile = fileToUpload.asRequestBody(finalMimeType.toMediaTypeOrNull())
         val filePart = MultipartBody.Part.createFormData("file", finalFileName, requestFile)
         val modelRequestBody = model.toRequestBody("text/plain".toMediaTypeOrNull())
-        
+        val languagePart = language?.takeIf { it.isNotBlank() }?.let {
+            it.toRequestBody("text/plain".toMediaTypeOrNull())
+        }
+
         // Log debug information
         println("TranscriptionRepository: Using model: $model")
         println("TranscriptionRepository: Original filename: $originalName")
@@ -359,14 +362,15 @@ class TranscriptionRepository(private val context: Context) {
         println("TranscriptionRepository: MIME type: $finalMimeType")
         println("TranscriptionRepository: Needs transcoding: $needsTranscoding")
         println("TranscriptionRepository: File size: ${fileToUpload.length()} bytes")
-        
+
         onProgress?.invoke("Uploading to ${model}...")
-        
+
         val response = try {
             transcriptionApi.transcribe(
                 authorization = "Bearer $apiKey",
                 file = filePart,
-                model = modelRequestBody
+                model = modelRequestBody,
+                language = languagePart
             )
         } catch (e: retrofit2.HttpException) {
             val errorBody = e.response()?.errorBody()?.string()
@@ -374,7 +378,7 @@ class TranscriptionRepository(private val context: Context) {
                 400 -> {
                     if (errorBody?.contains("unsupported") == true || errorBody?.contains("corrupted") == true) {
                         if (originalName.endsWith(".opus", ignoreCase = true) || originalName.endsWith(".ogg", ignoreCase = true)) {
-                            if (model == "gpt-4o-mini-transcribe") {
+                            if (model == "gpt-4o-mini-transcribe" || model == "gpt-4o-transcribe") {
                                 "Opus file failed to convert or is unsupported by $model. Try using whisper-1 model instead, or convert to MP3/M4A/WAV format."
                             } else {
                                 "Opus files are not fully supported by $model. Try using whisper-1 model instead, or convert to MP3/M4A/WAV format."
@@ -399,12 +403,12 @@ class TranscriptionRepository(private val context: Context) {
                 fileToUpload.delete()
             }
         }
-        
+
         return response.text
     }
 
     suspend fun formatText(text: String): String {
-        val apiKey = settingsRepository.llmApiKeyFlow.first()
+    val apiKey = settingsRepository.apiKeyFlow.first()
         val customPrompt = settingsRepository.llmPromptFlow.first()
         
         // Use custom prompt if provided, otherwise use default
