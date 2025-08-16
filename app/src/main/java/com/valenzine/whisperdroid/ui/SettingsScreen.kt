@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,8 +32,6 @@ fun SettingsScreen() {
     val transcriptionModel by viewModel.transcriptionModel.collectAsState()
 
     var tempApiKey by remember { mutableStateOf("") }
-    var isEditingApiKey by remember { mutableStateOf(false) }
-    var showFullApiKey by remember { mutableStateOf(false) }
     var tempLlmPrompt by remember { mutableStateOf("") }
     var tempTranscriptionModel by remember { mutableStateOf("whisper-1") }
     var isModelDropdownExpanded by remember { mutableStateOf(false) }
@@ -77,24 +76,14 @@ fun SettingsScreen() {
         ) {
             // Single unified API key field
             Column(modifier = Modifier.fillMaxWidth()) {
-                val masked = remember(tempApiKey, showFullApiKey) {
-                    if (showFullApiKey || tempApiKey.length <= 10) tempApiKey
-                    else tempApiKey.take(10) + "•".repeat((tempApiKey.length - 10).coerceAtLeast(0))
-                }
                 TextField(
-                    value = if (isEditingApiKey) tempApiKey else masked,
+                    value = tempApiKey,
                     onValueChange = { tempApiKey = it },
                     label = { Text("API Key") },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { isEditingApiKey = it.isFocused },
+                        .fillMaxWidth(),
                     singleLine = true,
-                    trailingIcon = {
-                        IconButton(onClick = { showFullApiKey = !showFullApiKey }) {
-                            val desc = if (showFullApiKey) "Hide" else "Show"
-                            Icon(Icons.Filled.Visibility, contentDescription = desc)
-                        }
-                    }
+                    visualTransformation = PasswordVisualTransformation()
                 )
             }
 
