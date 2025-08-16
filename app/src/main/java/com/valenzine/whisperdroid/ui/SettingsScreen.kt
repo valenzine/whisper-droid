@@ -19,6 +19,10 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.OffsetMapping
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +53,27 @@ fun SettingsScreen() {
     }
     LaunchedEffect(transcriptionModel) {
         tempTranscriptionModel = transcriptionModel
+    }
+
+    // VisualTransformation that shows the first `visibleCount` characters and masks the rest
+    fun partialPasswordVisualTransformation(visibleCount: Int): VisualTransformation {
+        return VisualTransformation { text ->
+            val original = text.text
+            if (original.length <= visibleCount) {
+                TransformedText(AnnotatedString(original), object : OffsetMapping {
+                    override fun originalToTransformed(offset: Int) = offset
+                    override fun transformedToOriginal(offset: Int) = offset
+                })
+            } else {
+                val visible = original.take(visibleCount)
+                val masked = "•".repeat(original.length - visibleCount)
+                val transformed = visible + masked
+                TransformedText(AnnotatedString(transformed), object : OffsetMapping {
+                    override fun originalToTransformed(offset: Int) = offset
+                    override fun transformedToOriginal(offset: Int) = offset
+                })
+            }
+        }
     }
 
     Scaffold(
@@ -83,7 +108,7 @@ fun SettingsScreen() {
                     modifier = Modifier
                         .fillMaxWidth(),
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
+                    visualTransformation = partialPasswordVisualTransformation(12)
                 )
             }
 
