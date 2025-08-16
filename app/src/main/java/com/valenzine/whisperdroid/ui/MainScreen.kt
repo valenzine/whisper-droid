@@ -205,7 +205,10 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
             val coroutineScope = rememberCoroutineScope()
 
             Row {
-                Button(onClick = { viewModel.formatText() }) {
+                Button(onClick = {
+                    viewModel.formatText()
+                    activeTabIndex = 1 // switch to Formatted tab after requesting format
+                }) {
                     Text("Format Text")
                 }
 
