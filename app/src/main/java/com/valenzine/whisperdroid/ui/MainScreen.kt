@@ -16,8 +16,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.navigation.NavController
 import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModel
 import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModelFactory
@@ -138,10 +142,12 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
             Spacer(modifier = Modifier.height(8.dp))
 
             // Content area (only one tab visible at a time). Each tab remembers its own height.
+            // Content area (only one tab visible at a time). Each tab remembers its own height.
             if (activeTabIndex == 0) {
                 TextField(
                     value = transcription,
                     onValueChange = { },
+                    readOnly = true,
                     label = { Text("Transcription") },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -153,6 +159,7 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
                 TextField(
                     value = formattedText,
                     onValueChange = { },
+                    readOnly = true,
                     label = { Text("Formatted Text") },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -193,9 +200,24 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Keep the format button available below the tabs
-            Button(onClick = { viewModel.formatText() }) {
-                Text("Format Text")
+            // Keep the format and copy buttons available below the tabs
+            val clipboardManager = LocalClipboardManager.current
+            val coroutineScope = rememberCoroutineScope()
+
+            Row {
+                Button(onClick = { viewModel.formatText() }) {
+                    Text("Format Text")
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Button(onClick = {
+                    val textToCopy = if (activeTabIndex == 0) transcription else formattedText
+                    clipboardManager.setText(AnnotatedString(textToCopy))
+                    coroutineScope.launch { snackbarHostState.showSnackbar("Copied to clipboard") }
+                }) {
+                    Text("Copy")
+                }
             }
 
         }
