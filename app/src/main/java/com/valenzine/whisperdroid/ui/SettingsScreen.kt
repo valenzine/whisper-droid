@@ -42,7 +42,7 @@ fun SettingsScreen() {
     val snackbarHostState = remember { SnackbarHostState() }
     var showSnackbar by remember { mutableStateOf(false) }
 
-    val transcriptionModels = listOf("whisper-1", "gpt-4o-mini-transcribe")
+    val transcriptionModels = listOf("whisper-1", "gpt-4o-mini-transcribe","gpt-4o-transcribe")
 
     // Keep temp values in sync with ViewModel when they change
     LaunchedEffect(apiKey) {

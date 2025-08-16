@@ -89,7 +89,7 @@ class TranscriptionViewModel(
                         val model = settingsRepo.transcriptionModelFlow.first()
                         val fileExtension = file.extension.lowercase()
 
-                        if ((fileExtension == "opus" || fileExtension == "ogg") && model == "gpt-4o-mini-transcribe") {
+                        if ((fileExtension == "opus" || fileExtension == "ogg") && (model == "gpt-4o-mini-transcribe" || model == "gpt-4o-transcribe")) {
                             "Opus/OGG files are not supported by $model. Try using whisper-1 model instead, or convert your file to MP3/AAC format first."
                         } else {
                             "File format not supported or file corrupted. Supported formats: MP3, AAC, WAV, FLAC, OGG (whisper-1 only)"

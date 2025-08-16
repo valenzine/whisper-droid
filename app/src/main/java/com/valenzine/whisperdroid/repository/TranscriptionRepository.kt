@@ -265,7 +265,7 @@ class TranscriptionRepository(private val context: Context) {
         val originalName = file.name
         val isOpus = originalName.endsWith(".opus", ignoreCase = true)
         val isOgg = originalName.endsWith(".ogg", ignoreCase = true)
-        val isGpt4Mini = model == "gpt-4o-mini-transcribe"
+        val isGpt4Mini = (model == "gpt-4o-mini-transcribe" || model == "gpt-4o-transcribe")
         val needsTranscoding = isGpt4Mini && (isOpus || isOgg)
 
         if (needsTranscoding) {
@@ -378,7 +378,7 @@ class TranscriptionRepository(private val context: Context) {
                 400 -> {
                     if (errorBody?.contains("unsupported") == true || errorBody?.contains("corrupted") == true) {
                         if (originalName.endsWith(".opus", ignoreCase = true) || originalName.endsWith(".ogg", ignoreCase = true)) {
-                            if (model == "gpt-4o-mini-transcribe") {
+                            if (model == "gpt-4o-mini-transcribe" || model == "gpt-4o-transcribe") {
                                 "Opus file failed to convert or is unsupported by $model. Try using whisper-1 model instead, or convert to MP3/M4A/WAV format."
                             } else {
                                 "Opus files are not fully supported by $model. Try using whisper-1 model instead, or convert to MP3/M4A/WAV format."
