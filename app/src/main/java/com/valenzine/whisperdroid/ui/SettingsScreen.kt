@@ -14,6 +14,8 @@ import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModelFactory
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+// Visibility icons not present in this project's icon set; use existing icons instead
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 
@@ -24,13 +26,13 @@ fun SettingsScreen() {
     val activity = context as? androidx.activity.ComponentActivity
     val repository = remember { com.valenzine.whisperdroid.repository.SettingsRepository(context) }
     val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(repository))
-    val transcriptionApiKey by viewModel.transcriptionApiKey.collectAsState()
-    val llmApiKey by viewModel.llmApiKey.collectAsState()
+    val apiKey by viewModel.apiKey.collectAsState()
     val llmPrompt by viewModel.llmPrompt.collectAsState()
     val transcriptionModel by viewModel.transcriptionModel.collectAsState()
 
-    var tempTranscriptionApiKey by remember { mutableStateOf("") }
-    var tempLlmApiKey by remember { mutableStateOf("") }
+    var tempApiKey by remember { mutableStateOf("") }
+    var isEditingApiKey by remember { mutableStateOf(false) }
+    var showFullApiKey by remember { mutableStateOf(false) }
     var tempLlmPrompt by remember { mutableStateOf("") }
     var tempTranscriptionModel by remember { mutableStateOf("whisper-1") }
     var isModelDropdownExpanded by remember { mutableStateOf(false) }
@@ -40,11 +42,8 @@ fun SettingsScreen() {
     val transcriptionModels = listOf("whisper-1", "gpt-4o-mini-transcribe")
 
     // Keep temp values in sync with ViewModel when they change
-    LaunchedEffect(transcriptionApiKey) {
-        tempTranscriptionApiKey = transcriptionApiKey
-    }
-    LaunchedEffect(llmApiKey) {
-        tempLlmApiKey = llmApiKey
+    LaunchedEffect(apiKey) {
+        tempApiKey = apiKey
     }
     LaunchedEffect(llmPrompt) {
         tempLlmPrompt = llmPrompt
@@ -76,21 +75,32 @@ fun SettingsScreen() {
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            TextField(
-                value = tempTranscriptionApiKey,
-                onValueChange = { tempTranscriptionApiKey = it },
-                label = { Text("Transcription API Key") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Single unified API key field
+            Column(modifier = Modifier.fillMaxWidth()) {
+                val masked = remember(tempApiKey, showFullApiKey) {
+                    if (showFullApiKey || tempApiKey.length <= 10) tempApiKey
+                    else tempApiKey.take(10) + "•".repeat((tempApiKey.length - 10).coerceAtLeast(0))
+                }
+                TextField(
+                    value = if (isEditingApiKey) tempApiKey else masked,
+                    onValueChange = { tempApiKey = it },
+                    label = { Text("API Key") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { isEditingApiKey = it.isFocused },
+                    singleLine = true,
+                    trailingIcon = {
+                        IconButton(onClick = { showFullApiKey = !showFullApiKey }) {
+                            val desc = if (showFullApiKey) "Hide" else "Show"
+                            Icon(Icons.Filled.Visibility, contentDescription = desc)
+                        }
+                    }
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            TextField(
-                value = tempLlmApiKey,
-                onValueChange = { tempLlmApiKey = it },
-                label = { Text("LLM API Key") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            // LLM API Key field removed - we use the single unified key above
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -140,8 +150,8 @@ fun SettingsScreen() {
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(onClick = {
-                viewModel.saveTranscriptionApiKey(tempTranscriptionApiKey)
-                viewModel.saveLlmApiKey(tempLlmApiKey)
+                // Save unified API key
+                viewModel.saveApiKey(tempApiKey)
                 viewModel.saveLlmPrompt(tempLlmPrompt)
                 viewModel.saveTranscriptionModel(tempTranscriptionModel)
                 showSnackbar = true

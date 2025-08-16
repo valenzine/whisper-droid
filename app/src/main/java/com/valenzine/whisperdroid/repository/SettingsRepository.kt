@@ -13,19 +13,15 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 class SettingsRepository(private val context: Context) {
 
-    private val transcriptionApiKey = stringPreferencesKey("transcription_api_key")
-    private val llmApiKey = stringPreferencesKey("llm_api_key")
+    private val apiKey = stringPreferencesKey("api_key")
     private val llmPrompt = stringPreferencesKey("llm_prompt")
     private val transcriptionModel = stringPreferencesKey("transcription_model")
 
-    val transcriptionApiKeyFlow: Flow<String> = context.dataStore.data
+    // Unified API key flow (legacy keys removed in cleanup). If migrating from older versions you may
+    // add code here to look up and migrate old keys once.
+    val apiKeyFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
-            preferences[transcriptionApiKey] ?: ""
-        }
-
-    val llmApiKeyFlow: Flow<String> = context.dataStore.data
-        .map { preferences ->
-            preferences[llmApiKey] ?: ""
+            preferences[apiKey] ?: ""
         }
 
     val llmPromptFlow: Flow<String> = context.dataStore.data
@@ -38,15 +34,9 @@ class SettingsRepository(private val context: Context) {
             preferences[transcriptionModel] ?: "whisper-1"  // Default to whisper-1
         }
 
-    suspend fun saveTranscriptionApiKey(apiKey: String) {
+    suspend fun saveApiKey(key: String) {
         context.dataStore.edit {
-            it[transcriptionApiKey] = apiKey
-        }
-    }
-
-    suspend fun saveLlmApiKey(apiKey: String) {
-        context.dataStore.edit {
-            it[llmApiKey] = apiKey
+            it[apiKey] = key
         }
     }
 

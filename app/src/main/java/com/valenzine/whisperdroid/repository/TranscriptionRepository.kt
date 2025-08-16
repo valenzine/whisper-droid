@@ -251,7 +251,7 @@ class TranscriptionRepository(private val context: Context) {
     }
 
     suspend fun transcribeFile(file: File, language: String? = null, onProgress: ((String) -> Unit)? = null): String {
-        val apiKey = settingsRepository.transcriptionApiKeyFlow.first()
+    val apiKey = settingsRepository.apiKeyFlow.first()
         val model = settingsRepository.transcriptionModelFlow.first()
         
         println("=== TranscriptionRepository Debug ===")
@@ -408,7 +408,7 @@ class TranscriptionRepository(private val context: Context) {
     }
 
     suspend fun formatText(text: String): String {
-        val apiKey = settingsRepository.llmApiKeyFlow.first()
+    val apiKey = settingsRepository.apiKeyFlow.first()
         val customPrompt = settingsRepository.llmPromptFlow.first()
         
         // Use custom prompt if provided, otherwise use default
