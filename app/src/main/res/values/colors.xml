@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="splash_background">#006669</color> <!-- Example: white background -->
+    <color name="icon_background_color">#000000</color> <!-- Example: black icon background -->
+</resources>
