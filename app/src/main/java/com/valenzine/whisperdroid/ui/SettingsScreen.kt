@@ -13,16 +13,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModelFactory
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-// Visibility icons not present in this project's icon set; use existing icons instead
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.OffsetMapping
+import com.valenzine.whisperdroid.model.ModelCatalog
+import com.valenzine.whisperdroid.repository.AppSettings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,29 +30,30 @@ fun SettingsScreen() {
     val activity = context as? androidx.activity.ComponentActivity
     val repository = remember { com.valenzine.whisperdroid.repository.SettingsRepository(context) }
     val viewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(repository))
-    val apiKey by viewModel.apiKey.collectAsState()
-    val llmPrompt by viewModel.llmPrompt.collectAsState()
-    val transcriptionModel by viewModel.transcriptionModel.collectAsState()
+    val settings by viewModel.settings.collectAsState()
 
     var tempApiKey by remember { mutableStateOf("") }
     var tempLlmPrompt by remember { mutableStateOf("") }
-    var tempTranscriptionModel by remember { mutableStateOf("whisper-1") }
+    var tempTranscriptionModel by remember { mutableStateOf(ModelCatalog.DEFAULT_TRANSCRIPTION_MODEL) }
+    var tempLlmModel by remember { mutableStateOf(ModelCatalog.DEFAULT_LLM_MODEL) }
     var isModelDropdownExpanded by remember { mutableStateOf(false) }
+    var isLlmModelDropdownExpanded by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     var showSnackbar by remember { mutableStateOf(false) }
 
-    val transcriptionModels = listOf("whisper-1", "gpt-4o-mini-transcribe","gpt-4o-transcribe")
+    val transcriptionModels = ModelCatalog.transcriptionModels
 
     // Keep temp values in sync with ViewModel when they change
-    LaunchedEffect(apiKey) {
-        tempApiKey = apiKey
+    LaunchedEffect(settings.apiKey) {
+        tempApiKey = settings.apiKey
     }
-    LaunchedEffect(llmPrompt) {
-        tempLlmPrompt = llmPrompt
+    LaunchedEffect(settings.llmPrompt) {
+        tempLlmPrompt = settings.llmPrompt
     }
-    LaunchedEffect(transcriptionModel) {
-        tempTranscriptionModel = transcriptionModel
+    LaunchedEffect(settings.transcriptionModel) {
+        tempTranscriptionModel = settings.transcriptionModel
     }
+    LaunchedEffect(settings.llmModel) { tempLlmModel = settings.llmModel }
 
     // VisualTransformation that shows the first `visibleCount` characters and masks the rest
     fun partialPasswordVisualTransformation(visibleCount: Int): VisualTransformation {
@@ -84,7 +84,7 @@ fun SettingsScreen() {
                     IconButton(onClick = {
                         activity?.onBackPressedDispatcher?.onBackPressed()
                     }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -123,14 +123,14 @@ fun SettingsScreen() {
                 onExpandedChange = { isModelDropdownExpanded = !isModelDropdownExpanded }
             ) {
                 TextField(
-                    value = tempTranscriptionModel,
+                    value = ModelCatalog.transcriptionModels.firstOrNull { it.id == tempTranscriptionModel }?.label ?: tempTranscriptionModel,
                     onValueChange = { },
                     readOnly = true,
                     label = { Text("Transcription Model") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isModelDropdownExpanded) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 )
                 ExposedDropdownMenu(
                     expanded = isModelDropdownExpanded,
@@ -138,10 +138,42 @@ fun SettingsScreen() {
                 ) {
                     transcriptionModels.forEach { model ->
                         DropdownMenuItem(
-                            text = { Text(model) },
+                            text = { Text(model.label) },
                             onClick = {
-                                tempTranscriptionModel = model
+                                tempTranscriptionModel = model.id
                                 isModelDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            ExposedDropdownMenuBox(
+                expanded = isLlmModelDropdownExpanded,
+                onExpandedChange = { isLlmModelDropdownExpanded = !isLlmModelDropdownExpanded }
+            ) {
+                TextField(
+                    value = ModelCatalog.llmModels.firstOrNull { it.id == tempLlmModel }?.label ?: tempLlmModel,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Processing model") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isLlmModelDropdownExpanded) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                )
+                ExposedDropdownMenu(
+                    expanded = isLlmModelDropdownExpanded,
+                    onDismissRequest = { isLlmModelDropdownExpanded = false }
+                ) {
+                    ModelCatalog.llmModels.forEach { model ->
+                        DropdownMenuItem(
+                            text = { Text("${model.label} — ${model.description}") },
+                            onClick = {
+                                tempLlmModel = model.id
+                                isLlmModelDropdownExpanded = false
                             }
                         )
                     }
@@ -164,10 +196,15 @@ fun SettingsScreen() {
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(onClick = {
-                // Save unified API key
-                viewModel.saveApiKey(tempApiKey)
-                viewModel.saveLlmPrompt(tempLlmPrompt)
-                viewModel.saveTranscriptionModel(tempTranscriptionModel)
+                viewModel.save(
+                    AppSettings(
+                        apiKey = tempApiKey,
+                        llmPrompt = tempLlmPrompt,
+                        transcriptionModel = tempTranscriptionModel,
+                        llmModel = tempLlmModel,
+                        autoProcess = settings.autoProcess
+                    )
+                )
                 showSnackbar = true
             }) {
                 Text("Save")
