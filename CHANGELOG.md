@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.0] - 2026-09-08
+### Added
+- Optional automatic LLM processing and inline prompt editing with persistence.
+- `gpt-transcribe` plus compatible transcription model options and cost-effective `gpt-5.6-luna`/`gpt-5-nano` processing choices.
+- Release signing configuration, GitHub verification/release workflows, APK signature checks, and checksums.
+
+### Changed
+- Raised the durable release identity to version code 5 and version name 0.2.0 while keeping application ID `com.valenzine.whisperdroid`.
+- Release builds now fail when a local or CI signing key is not configured.
+
+### Fixed
+- Consumed each shared-audio intent once so returning from Settings cannot re-transcribe the previous file.
+
+### Documentation
+- Added Android package/profile diagnosis and signed-release migration instructions.
+
 ## [0.1.3] - 2026-09-08
 ### Added
 - Android 12 and newer splash-screen resources.

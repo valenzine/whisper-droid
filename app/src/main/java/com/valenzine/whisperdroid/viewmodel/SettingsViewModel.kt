@@ -2,6 +2,7 @@ package com.valenzine.whisperdroid.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.valenzine.whisperdroid.repository.AppSettings
 import com.valenzine.whisperdroid.repository.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -9,39 +10,13 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(private val repository: SettingsRepository) : ViewModel() {
 
-    val apiKey = repository.apiKeyFlow.stateIn(
+    val settings = repository.settingsFlow.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ""
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = AppSettings()
     )
 
-    val llmPrompt = repository.llmPromptFlow.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ""
-    )
-
-    val transcriptionModel = repository.transcriptionModelFlow.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = "whisper-1"
-    )
-
-    fun saveApiKey(key: String) {
-        viewModelScope.launch {
-            repository.saveApiKey(key)
-        }
-    }
-
-    fun saveLlmPrompt(prompt: String) {
-        viewModelScope.launch {
-            repository.saveLlmPrompt(prompt)
-        }
-    }
-
-    fun saveTranscriptionModel(model: String) {
-        viewModelScope.launch {
-            repository.saveTranscriptionModel(model)
-        }
-    }
+    fun save(settings: AppSettings) = viewModelScope.launch { repository.saveSettings(settings) }
+    fun saveLlmPrompt(prompt: String) = viewModelScope.launch { repository.saveLlmPrompt(prompt) }
+    fun setAutoProcess(enabled: Boolean) = viewModelScope.launch { repository.saveAutoProcess(enabled) }
 }

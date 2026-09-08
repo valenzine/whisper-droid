@@ -5,41 +5,56 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.navigation.NavController
+import android.net.Uri
+import androidx.compose.ui.focus.onFocusChanged
+import com.valenzine.whisperdroid.model.DEFAULT_LLM_PROMPT
+import com.valenzine.whisperdroid.repository.SettingsRepository
+import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
+import com.valenzine.whisperdroid.viewmodel.SettingsViewModelFactory
+import com.valenzine.whisperdroid.viewmodel.TranscriptionUiState
 import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModel
 import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModelFactory
-import java.io.File
-import android.net.Uri
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
+fun MainScreen(
+    navController: NavController,
+    sharedAudioUri: Uri? = null,
+    onSharedAudioConsumed: () -> Unit = {}
+) {
     val context = LocalContext.current
     val repository = remember { com.valenzine.whisperdroid.repository.TranscriptionRepository(context) }
-    val viewModel: TranscriptionViewModel = viewModel(factory = TranscriptionViewModelFactory(repository))
-    val transcription by viewModel.transcription.collectAsState()
-    val formattedText by viewModel.formattedText.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
+    val settingsRepository = remember { SettingsRepository(context) }
+    val viewModel: TranscriptionViewModel = viewModel(factory = TranscriptionViewModelFactory(repository, settingsRepository))
+    val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(settingsRepository))
+    val screenState by viewModel.screenState.collectAsState()
+    val appSettings by settingsViewModel.settings.collectAsState()
+    val transcription = screenState.transcription
+    val formattedText = screenState.formattedText
+    val uiState = screenState.phase
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Language selection state
     val languageOptions = listOf("Automatic", "English", "Spanish", "Italian")
     val languageCodes = mapOf(
         "Automatic" to null,
@@ -52,22 +67,41 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
     var selectedLanguage by remember { mutableStateOf("Automatic") }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { processAudioFile(it, context, viewModel, languageCodes[selectedLanguage]) }
+        uri?.let { viewModel.transcribeUri(it, languageCodes[selectedLanguage]) }
     }
 
-    // Process shared audio file when the screen loads
-    LaunchedEffect(sharedAudioUri) {
+    LaunchedEffect(sharedAudioUri, screenState.isBusy, appSettings.apiKey) {
         sharedAudioUri?.let { uri ->
-            processAudioFile(uri, context, viewModel, languageCodes[selectedLanguage])
+            if (settingsRepository.settingsFlow.first().apiKey.isBlank()) {
+                snackbarHostState.showSnackbar("Add an OpenAI API key in Settings before transcribing.")
+            } else {
+                viewModel.transcribeUri(uri, languageCodes[selectedLanguage], onSharedAudioConsumed)
+            }
         }
     }
 
-    // Tabs and resizable text area state
-    var activeTabIndex by remember { mutableStateOf(0) }
+    var activeTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("Transcription", "Formatted")
     var transcriptionHeight by remember { mutableStateOf(150.dp) }
     var formattedHeight by remember { mutableStateOf(150.dp) }
     val density = androidx.compose.ui.platform.LocalDensity.current
+    var promptExpanded by rememberSaveable { mutableStateOf(false) }
+    var promptDraft by rememberSaveable { mutableStateOf(appSettings.llmPrompt) }
+    var promptFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(appSettings.llmPrompt) {
+        if (!promptFocused) promptDraft = appSettings.llmPrompt
+    }
+    LaunchedEffect(promptDraft) {
+        delay(500)
+        if (promptDraft != appSettings.llmPrompt) settingsViewModel.saveLlmPrompt(promptDraft)
+    }
+    LaunchedEffect(screenState.phase) {
+        val phase = screenState.phase
+        if (phase is TranscriptionUiState.Success && phase.formattedText != null) {
+            activeTabIndex = 1
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -86,7 +120,10 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                IconButton(onClick = { navController.navigate("settings") }) {
+                IconButton(onClick = {
+                    settingsViewModel.saveLlmPrompt(promptDraft)
+                    navController.navigate("settings")
+                }) {
                     Icon(Icons.Default.Settings, contentDescription = "Settings")
                 }
             }
@@ -106,7 +143,9 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
                             expanded = languageDropdownExpanded
                         )
                     },
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
+                    modifier = Modifier
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth()
                 )
                 ExposedDropdownMenu(
                     expanded = languageDropdownExpanded,
@@ -126,13 +165,51 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Button(onClick = { launcher.launch("audio/*") }) {
+            Button(onClick = { launcher.launch("audio/*") }, enabled = !screenState.isBusy) {
                 Text("Select Audio File")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            TabRow(selectedTabIndex = activeTabIndex) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Automatically process after transcription", modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = appSettings.autoProcess,
+                            onCheckedChange = settingsViewModel::setAutoProcess
+                        )
+                    }
+                    TextButton(onClick = {
+                        promptExpanded = !promptExpanded
+                        if (!promptExpanded) settingsViewModel.saveLlmPrompt(promptDraft)
+                    }) {
+                        Text(if (promptExpanded) "Hide editing prompt" else "Edit processing prompt")
+                    }
+                    if (promptExpanded) {
+                        OutlinedTextField(
+                            value = promptDraft,
+                            onValueChange = { promptDraft = it },
+                            label = { Text("Processing instruction") },
+                            modifier = Modifier.fillMaxWidth().onFocusChanged {
+                                promptFocused = it.isFocused
+                                if (!it.isFocused) settingsViewModel.saveLlmPrompt(promptDraft)
+                            },
+                            minLines = 4
+                        )
+                        TextButton(onClick = { promptDraft = DEFAULT_LLM_PROMPT }) {
+                            Text("Reset to default prompt")
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            PrimaryTabRow(selectedTabIndex = activeTabIndex) {
                 tabs.forEachIndexed { index, title ->
                     Tab(selected = activeTabIndex == index, onClick = { activeTabIndex = index }) {
                         Text(text = title, modifier = Modifier.padding(12.dp))
@@ -142,8 +219,6 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Content area (only one tab visible at a time). Each tab remembers its own height.
-            // Content area (only one tab visible at a time). Each tab remembers its own height.
             if (activeTabIndex == 0) {
                 TextField(
                     value = transcription,
@@ -170,7 +245,6 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
                 )
             }
 
-            // Drag handle that adjusts the height of the currently visible tab's area
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -190,7 +264,6 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
                     .background(Color.Transparent),
                 contentAlignment = Alignment.Center
             ) {
-                // visible affordance for the drag handle
                 Box(
                     modifier = Modifier
                         .width(80.dp)
@@ -201,25 +274,23 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Keep the format and copy buttons available below the tabs
             val clipboardManager = LocalClipboardManager.current
             val coroutineScope = rememberCoroutineScope()
+            val activeText = if (activeTabIndex == 0) transcription else formattedText
 
             Row {
                 Button(onClick = {
                     viewModel.formatText()
-                    activeTabIndex = 1 // switch to Formatted tab after requesting format
-                }) {
+                }, enabled = transcription.isNotBlank() && !screenState.isBusy) {
                     Text("Format Text")
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Button(onClick = {
-                    val textToCopy = if (activeTabIndex == 0) transcription else formattedText
-                    clipboardManager.setText(AnnotatedString(textToCopy))
+                    clipboardManager.setText(AnnotatedString(activeText))
                     coroutineScope.launch { snackbarHostState.showSnackbar("Copied to clipboard") }
-                }) {
+                }, enabled = activeText.isNotBlank()) {
                     Text("Copy")
                 }
             }
@@ -304,38 +375,13 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
     }
 }
 
-// Helper function to process audio files from URI
-private fun processAudioFile(uri: Uri, context: android.content.Context, viewModel: TranscriptionViewModel, languageCode: String?) {
-    val inputStream = context.contentResolver.openInputStream(uri)
-    
-    // Get the original filename from the URI to preserve the extension
-    val originalFileName = try {
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-            cursor.moveToFirst()
-            cursor.getString(nameIndex)
-        }
-    } catch (e: Exception) {
-        null
-    }
-    
-    // Create temp file with preserved extension or fallback to generic name
-    val fileName = originalFileName ?: "temp_audio_file"
-    val file = File(context.cacheDir, fileName)
-    
-    inputStream?.let {
-        file.writeBytes(it.readBytes())
-        viewModel.transcribeFile(file, languageCode)
-    }
-}
-
 // Helper function to format file size
 private fun formatFileSize(bytes: Long): String {
     val kb = bytes / 1024.0
     val mb = kb / 1024.0
     return when {
-        mb >= 1 -> String.format("%.1f MB", mb)
-        kb >= 1 -> String.format("%.1f KB", kb)
+        mb >= 1 -> String.format(Locale.getDefault(), "%.1f MB", mb)
+        kb >= 1 -> String.format(Locale.getDefault(), "%.1f KB", kb)
         else -> "$bytes bytes"
     }
 }

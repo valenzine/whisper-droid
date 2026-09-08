@@ -10,6 +10,8 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -57,8 +59,17 @@ fun WhisperDroidTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            val statusBarColor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                colorScheme.background
+            } else {
+                colorScheme.primary
+            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                @Suppress("DEPRECATION")
+                window.statusBarColor = statusBarColor.toArgb()
+            }
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                shouldUseDarkStatusBarIcons(statusBarColor)
         }
     }
 
@@ -67,4 +78,15 @@ fun WhisperDroidTheme(
         typography = Typography,
         content = content
     )
+}
+
+/**
+ * Chooses the icon color with the strongest contrast against [statusBarColor].
+ *
+ * `isAppearanceLightStatusBars` controls dark icons, despite its inverse-sounding name.
+ * Basing this on the rendered color instead of the app theme also handles dynamic schemes.
+ */
+internal fun shouldUseDarkStatusBarIcons(statusBarColor: Color): Boolean {
+    // At this point black and white have equal WCAG contrast; prefer white on a tie.
+    return statusBarColor.luminance() > 0.179f
 }
