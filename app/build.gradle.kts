@@ -11,7 +11,7 @@ android {
         applicationId = "com.valenzine.whisperdroid"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
+        versionCode = 4
         versionName = "0.1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
