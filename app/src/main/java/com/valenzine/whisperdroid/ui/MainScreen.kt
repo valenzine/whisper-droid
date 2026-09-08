@@ -72,6 +72,7 @@ fun MainScreen(navController: NavController, sharedAudioUri: Uri? = null) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .safeDrawingPadding()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

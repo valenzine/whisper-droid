@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.3] - 2026-09-08
+### Added
+- Android 12 and newer splash-screen resources.
+- A pinned Gradle daemon JVM toolchain for consistent builds between Android Studio and the command line.
+
+### Changed
+- Updated the project to Android Gradle Plugin 9.4.0, Gradle 9.7.1, Kotlin and Compose compiler plugin 2.3.21, Java 17, and current Android dependencies.
+- Updated the compile and target SDK levels to Android 16 (API 36).
+- Migrated the Compose build configuration to the current Kotlin Compose plugin.
+
+### Fixed
+- Kept the main screen clear of the status bar, navigation bar, and display cutouts under Android's enforced edge-to-edge layout.
+- Corrected status-bar icon contrast in light and dark themes.
+- Moved Android 12-specific splash-screen attributes into the appropriate versioned resources.
+
 ## [0.1.2] - 2025-08-16
 ### Added
 - Support for the `gpt-4o-transcribe` model in addition to existing transcription models. 
