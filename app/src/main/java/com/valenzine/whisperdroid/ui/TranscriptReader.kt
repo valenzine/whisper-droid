@@ -1,6 +1,5 @@
 package com.valenzine.whisperdroid.ui
 
-import android.content.ClipData
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,16 +15,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,8 +61,6 @@ private fun ReaderScaffold(
     onBack: () -> Unit,
     content: @Composable (PaddingValues) -> Unit
 ) {
-    val clipboard = LocalClipboard.current
-    val scope = rememberCoroutineScope()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -78,14 +70,7 @@ private fun ReaderScaffold(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                actions = {
-                    TextButton(
-                        enabled = !text.isNullOrBlank(),
-                        onClick = {
-                            scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(title, text))) }
-                        }
-                    ) { Text("Copy") }
-                }
+                actions = { CopyTranscriptButton(text, title) }
             )
         }
     ) { insets ->
