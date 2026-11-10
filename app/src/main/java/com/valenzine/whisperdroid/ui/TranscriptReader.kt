@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.AbstractMarkwonPlugin
@@ -36,8 +37,13 @@ import org.commonmark.node.Link
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TranscriptReader(text: String?, formatted: Boolean, onBack: () -> Unit) {
-    val title = if (formatted) "Formatted text" else "Raw transcription"
+internal fun TranscriptReader(
+    text: String?,
+    formatted: Boolean,
+    promptName: String? = null,
+    onBack: () -> Unit
+) {
+    val title = promptName ?: if (formatted) "Formatted text" else "Raw transcription"
     ReaderScaffold(title, text, onBack) { insets ->
         if (text == null) {
             Box(Modifier.fillMaxSize().padding(insets).padding(16.dp)) {
@@ -121,7 +127,7 @@ private fun ReaderScaffold(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title) },
+                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

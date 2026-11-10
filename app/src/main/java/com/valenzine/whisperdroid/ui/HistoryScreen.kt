@@ -58,7 +58,8 @@ import android.text.format.DateFormat as AndroidDateFormat
 internal fun HistoryScreen(
     navController: NavController,
     app: WhisperDroidApplication,
-    openReader: (Long, Boolean) -> Unit
+    openRawReader: (Long) -> Unit,
+    openPromptResults: (Long) -> Unit
 ) {
     val entries by app.history.entries.collectAsState(initial = emptyList())
     val screenState by app.transcription.screenState.collectAsState()
@@ -108,8 +109,8 @@ internal fun HistoryScreen(
                             app.transcription.showHistoryEntry(entry)
                             navController.popBackStack()
                         },
-                        onReadRaw = { openReader(entry.id, false) },
-                        onReadFormatted = { openReader(entry.id, true) },
+                        onReadRaw = { openRawReader(entry.id) },
+                        onPromptResults = { openPromptResults(entry.id) },
                         reusableUri = { app.audioSession.reusableLocalUri(entry.audioFingerprint) },
                         onRetranscribe = { uri ->
                             if (app.audioSession.enqueue(uri, app.audioSession.shareLanguage, entry.audioFingerprint) == null) {
@@ -151,7 +152,7 @@ private fun HistoryEntryCard(
     isBusy: Boolean,
     onOpen: () -> Unit,
     onReadRaw: () -> Unit,
-    onReadFormatted: () -> Unit,
+    onPromptResults: () -> Unit,
     reusableUri: () -> Uri?,
     onRetranscribe: (Uri) -> Unit,
     onDelete: () -> Unit
@@ -194,6 +195,7 @@ private fun HistoryEntryCard(
                         reusableAudio?.let { uri ->
                             DropdownMenuItem(
                                 text = { Text("Re-transcribe") },
+                                enabled = !isBusy,
                                 onClick = {
                                     moreExpanded = false
                                     onRetranscribe(uri)
@@ -207,15 +209,15 @@ private fun HistoryEntryCard(
                 Text(
                     entry.summary,
                     style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onOpen, enabled = !isBusy) { Text("Open") }
                 TextButton(onClick = onReadRaw) { Text("Raw") }
-                if (entry.formattedText.isNotBlank()) {
-                    TextButton(onClick = onReadFormatted) { Text("Formatted") }
+                TextButton(onClick = onPromptResults) {
+                    Text(if (entry.formattedText.isNotBlank()) "Prompt results" else "Format")
                 }
             }
         }
