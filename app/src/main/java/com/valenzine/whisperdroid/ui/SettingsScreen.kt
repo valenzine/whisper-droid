@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -249,7 +250,15 @@ private fun PromptManagementCard(settings: AppSettings, viewModel: SettingsViewM
                     FilterChip(
                         selected = prompt.id == editorId,
                         onClick = { editorId = prompt.id },
-                        label = { Text(prompt.name, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                        label = {
+                            Text(
+                                prompt.name,
+                                modifier = Modifier.widthIn(max = 180.dp),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        },
+                        shape = CircleShape,
                         modifier = Modifier.padding(end = 8.dp)
                     )
                 }
@@ -274,11 +283,11 @@ private fun PromptManagementCard(settings: AppSettings, viewModel: SettingsViewM
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
-                        if (selectedPrompt == null) viewModel.createPrompt(nameDraft, contentDraft)
+                        if (selectedPrompt == null) viewModel.createPrompt(nameDraft, contentDraft) { editorId = it }
                         else viewModel.updatePrompt(
                             SavedPrompt(
                                 id = selectedPrompt.id,
-                                name = selectedPrompt.name,
+                                name = nameDraft,
                                 content = contentDraft,
                                 isBuiltIn = selectedPrompt.isBuiltIn
                             )

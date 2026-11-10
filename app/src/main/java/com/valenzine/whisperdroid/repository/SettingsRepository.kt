@@ -154,14 +154,17 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Settin
         if (prompts.any { it.id == id }) storePrompts(preferences, prompts, id)
     }
 
-    suspend fun createPrompt(name: String, content: String) = dataStore.edit { preferences ->
-        val prompts = decodePrompts(preferences[savedPromptsKey])
+    suspend fun createPrompt(name: String, content: String): String {
         val prompt = SavedPrompt(
             id = java.util.UUID.randomUUID().toString(),
             name = name.trim(),
             content = content.ifBlank { DEFAULT_LLM_PROMPT }
         )
-        storePrompts(preferences, prompts + prompt, prompt.id)
+        dataStore.edit { preferences ->
+            val prompts = decodePrompts(preferences[savedPromptsKey])
+            storePrompts(preferences, prompts + prompt, prompt.id)
+        }
+        return prompt.id
     }
 
     suspend fun updatePrompt(prompt: SavedPrompt) = dataStore.edit { preferences ->
