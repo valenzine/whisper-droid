@@ -28,7 +28,6 @@ import androidx.compose.ui.text.input.OffsetMapping
 import com.valenzine.whisperdroid.model.ModelCatalog
 import com.valenzine.whisperdroid.repository.AppSettings
 import com.valenzine.whisperdroid.repository.DEFAULT_PROMPT_ID
-import com.valenzine.whisperdroid.repository.SavedPrompt
 import com.valenzine.whisperdroid.model.DEFAULT_LLM_PROMPT
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -219,17 +218,12 @@ private fun PromptManagementCard(
     viewModel: SettingsViewModel
 ) {
     var editorId by rememberSaveable { mutableStateOf<String?>(settings.activePromptId) }
-    var nameDraft by rememberSaveable { mutableStateOf("") }
-    var contentDraft by rememberSaveable { mutableStateOf("") }
+    var nameDraft by rememberSaveable(editorId) { mutableStateOf<String?>(null) }
+    var contentDraft by rememberSaveable(editorId) { mutableStateOf<String?>(null) }
     val selectedPrompt = settings.prompts.firstOrNull { it.id == editorId }
-
-    LaunchedEffect(editorId, settings.prompts) {
-        val prompt = settings.prompts.firstOrNull { it.id == editorId }
-        if (prompt != null) {
-            nameDraft = prompt.name
-            contentDraft = prompt.content
-        }
-    }
+    val promptName = nameDraft ?: selectedPrompt?.name.orEmpty()
+    val promptContent = contentDraft ?: selectedPrompt?.content
+        ?: if (editorId == null) DEFAULT_LLM_PROMPT else ""
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -240,8 +234,8 @@ private fun PromptManagementCard(
                 }
                 TextButton(onClick = {
                     editorId = null
-                    nameDraft = ""
-                    contentDraft = DEFAULT_LLM_PROMPT
+                    nameDraft = null
+                    contentDraft = null
                 }) { Text("New") }
             }
             Row(
@@ -284,7 +278,7 @@ private fun PromptManagementCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
-                value = nameDraft,
+                value = promptName,
                 onValueChange = { nameDraft = it },
                 label = { Text("Prompt name") },
                 enabled = selectedPrompt?.isBuiltIn != true,
@@ -293,7 +287,7 @@ private fun PromptManagementCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
-                value = contentDraft,
+                value = promptContent,
                 onValueChange = { contentDraft = it },
                 label = { Text("Processing instruction") },
                 modifier = Modifier.fillMaxWidth(),
@@ -302,21 +296,22 @@ private fun PromptManagementCard(
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
-                        if (selectedPrompt == null) viewModel.createPrompt(nameDraft, contentDraft) { editorId = it }
-                        else viewModel.updatePrompt(
-                            SavedPrompt(
-                                id = selectedPrompt.id,
-                                name = nameDraft,
-                                content = contentDraft,
-                                isBuiltIn = selectedPrompt.isBuiltIn
-                            )
-                        )
+                        if (selectedPrompt == null) {
+                            viewModel.createPrompt(promptName, promptContent) { editorId = it }
+                        } else {
+                            viewModel.updatePrompt(selectedPrompt.copy(name = promptName, content = promptContent))
+                            nameDraft = null
+                            contentDraft = null
+                        }
                     },
-                    enabled = nameDraft.isNotBlank() && (editorId == null || selectedPrompt != null)
+                    enabled = promptName.isNotBlank() && (editorId == null || selectedPrompt != null)
                 ) { Text("Save prompt") }
                 Spacer(modifier = Modifier.width(8.dp))
                 if (selectedPrompt?.isBuiltIn == true) {
-                    TextButton(onClick = { viewModel.resetDefaultPrompt() }) { Text("Reset default") }
+                    TextButton(onClick = {
+                        viewModel.resetDefaultPrompt()
+                        contentDraft = null
+                    }) { Text("Reset default") }
                 } else if (selectedPrompt != null) {
                     TextButton(onClick = {
                         viewModel.deletePrompt(selectedPrompt.id)
