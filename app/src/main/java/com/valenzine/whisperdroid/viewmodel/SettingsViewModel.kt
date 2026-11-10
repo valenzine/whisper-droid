@@ -18,7 +18,6 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
     )
 
     fun save(settings: AppSettings) = viewModelScope.launch { repository.saveSettings(settings) }
-    fun saveLlmPrompt(prompt: String) = viewModelScope.launch { repository.saveLlmPrompt(prompt) }
     fun selectPrompt(id: String) = viewModelScope.launch { repository.selectPrompt(id) }
     fun createPrompt(name: String, content: String) = viewModelScope.launch { repository.createPrompt(name, content) }
     fun updatePrompt(prompt: SavedPrompt) = viewModelScope.launch { repository.updatePrompt(prompt) }

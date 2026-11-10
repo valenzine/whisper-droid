@@ -1,8 +1,8 @@
 package com.valenzine.whisperdroid.repository
 
 import android.content.Context
-import androidx.datastore.core.DataMigration
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.DataMigration
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -29,12 +29,13 @@ internal object RetiredLlmModelMigration : DataMigration<Preferences> {
     override suspend fun cleanUp() = Unit
 }
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "settings",
-    produceMigrations = { listOf(RetiredLlmModelMigration) }
-)
-
 const val DEFAULT_PROMPT_ID = "default"
+internal const val MIGRATED_PROMPT_ID = "migrated"
+
+private val legacyLlmPromptKey = stringPreferencesKey("llm_prompt")
+private val savedPromptsKey = stringPreferencesKey("saved_prompts")
+private val activePromptIdKey = stringPreferencesKey("active_prompt_id")
+private val promptGson = Gson()
 
 data class SavedPrompt(
     val id: String,
@@ -48,6 +49,48 @@ private fun builtInPrompt() = SavedPrompt(
     name = "Default prompt",
     content = DEFAULT_LLM_PROMPT,
     isBuiltIn = true
+)
+
+private fun List<SavedPrompt>.ensureBuiltIn(): List<SavedPrompt> =
+    if (any { it.id == DEFAULT_PROMPT_ID }) this else listOf(builtInPrompt()) + this
+
+internal fun decodePrompts(serialized: String?): List<SavedPrompt> {
+    val decoded = runCatching {
+        promptGson.fromJson<List<SavedPrompt>>(serialized, object : TypeToken<List<SavedPrompt>>() {}.type)
+    }.getOrNull().orEmpty()
+    return decoded.ensureBuiltIn().takeIf { decoded.isNotEmpty() } ?: listOf(builtInPrompt())
+}
+
+private fun storePrompts(preferences: MutablePreferences, prompts: List<SavedPrompt>, selectedId: String) {
+    val normalized = prompts.ensureBuiltIn()
+    val activeId = selectedId.takeIf { id -> normalized.any { it.id == id } } ?: DEFAULT_PROMPT_ID
+    preferences[savedPromptsKey] = promptGson.toJson(normalized)
+    preferences[activePromptIdKey] = activeId
+    preferences[legacyLlmPromptKey] = normalized.first { it.id == activeId }.content
+}
+
+internal object SavedPromptMigration : DataMigration<Preferences> {
+    override suspend fun shouldMigrate(currentData: Preferences): Boolean = currentData[savedPromptsKey].isNullOrBlank()
+
+    override suspend fun migrate(currentData: Preferences): Preferences = currentData.toMutablePreferences().apply {
+        val legacyPrompt = currentData[legacyLlmPromptKey]?.takeIf(String::isNotBlank)
+        if (legacyPrompt == null || legacyPrompt == DEFAULT_LLM_PROMPT) {
+            storePrompts(this, listOf(builtInPrompt()), DEFAULT_PROMPT_ID)
+        } else {
+            storePrompts(
+                this,
+                listOf(builtInPrompt(), SavedPrompt(MIGRATED_PROMPT_ID, "Migrated prompt", legacyPrompt)),
+                MIGRATED_PROMPT_ID
+            )
+        }
+    }
+
+    override suspend fun cleanUp() = Unit
+}
+
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "settings",
+    produceMigrations = { listOf(RetiredLlmModelMigration, SavedPromptMigration) }
 )
 
 data class AppSettings(
@@ -71,17 +114,12 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Settin
     constructor(context: Context) : this(context.applicationContext.dataStore)
 
     private val apiKey = stringPreferencesKey("api_key")
-    private val llmPrompt = stringPreferencesKey("llm_prompt")
-    private val savedPrompts = stringPreferencesKey("saved_prompts")
-    private val activePromptId = stringPreferencesKey("active_prompt_id")
     private val transcriptionModel = stringPreferencesKey("transcription_model")
     private val autoProcess = booleanPreferencesKey("auto_process")
 
-    private val gson = Gson()
-
     override val settingsFlow: Flow<AppSettings> = dataStore.data.map { preferences ->
-        val prompts = decodePrompts(preferences[savedPrompts], preferences[llmPrompt])
-        val selectedPromptId = preferences[activePromptId]
+        val prompts = decodePrompts(preferences[savedPromptsKey])
+        val selectedPromptId = preferences[activePromptIdKey]
             ?.takeIf { id -> prompts.any { it.id == id } }
             ?: prompts.first().id
         AppSettings(
@@ -99,14 +137,6 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Settin
     suspend fun saveSettings(settings: AppSettings) {
         dataStore.edit {
             it[apiKey] = settings.apiKey
-            val isLegacyCustomPrompt = settings.prompts == listOf(builtInPrompt()) &&
-                settings.llmPrompt.isNotBlank() && settings.llmPrompt != DEFAULT_LLM_PROMPT
-            val prompts = if (isLegacyCustomPrompt) {
-                listOf(builtInPrompt(), SavedPrompt("migrated", "Migrated prompt", settings.llmPrompt))
-            } else settings.prompts
-            val activeId = if (isLegacyCustomPrompt) "migrated"
-            else if (prompts.any { it.id == settings.activePromptId }) settings.activePromptId else prompts.last().id
-            storePrompts(it, prompts, activeId)
             it[transcriptionModel] = settings.transcriptionModel
             it[llmModelKey] = settings.llmModel.takeUnless { model -> model == RETIRED_LLM_MODEL }
                 ?: ModelCatalog.DEFAULT_LLM_MODEL
@@ -114,22 +144,13 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Settin
         }
     }
 
-    suspend fun saveLlmPrompt(prompt: String) = dataStore.edit { preferences ->
-        val prompts = decodePrompts(preferences[savedPrompts], preferences[llmPrompt])
-        val activeId = preferences[activePromptId]?.takeIf { id -> prompts.any { it.id == id } } ?: prompts.first().id
-        val updatedPrompts = prompts.map { saved ->
-            if (saved.id == activeId) saved.copy(content = prompt.ifBlank { DEFAULT_LLM_PROMPT }) else saved
-        }
-        storePrompts(preferences, updatedPrompts, activeId)
-    }
-
     suspend fun selectPrompt(id: String) = dataStore.edit { preferences ->
-        val prompts = decodePrompts(preferences[savedPrompts], preferences[llmPrompt])
+        val prompts = decodePrompts(preferences[savedPromptsKey])
         if (prompts.any { it.id == id }) storePrompts(preferences, prompts, id)
     }
 
     suspend fun createPrompt(name: String, content: String) = dataStore.edit { preferences ->
-        val prompts = decodePrompts(preferences[savedPrompts], preferences[llmPrompt])
+        val prompts = decodePrompts(preferences[savedPromptsKey])
         val prompt = SavedPrompt(
             id = java.util.UUID.randomUUID().toString(),
             name = name.trim(),
@@ -139,47 +160,23 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Settin
     }
 
     suspend fun updatePrompt(prompt: SavedPrompt) = dataStore.edit { preferences ->
-        val prompts = decodePrompts(preferences[savedPrompts], preferences[llmPrompt])
+        val prompts = decodePrompts(preferences[savedPromptsKey])
         val updated = prompts.map { saved ->
-            if (saved.id == prompt.id) prompt.copy(
-                name = if (prompt.isBuiltIn) saved.name else prompt.name.trim(),
-                content = prompt.content.ifBlank { DEFAULT_LLM_PROMPT },
-                isBuiltIn = saved.isBuiltIn
-            ) else saved
+            if (saved.id != prompt.id || saved.isBuiltIn) saved
+            else prompt.copy(name = prompt.name.trim(), content = prompt.content.ifBlank { DEFAULT_LLM_PROMPT })
         }
-        val activeId = preferences[activePromptId]?.takeIf { id -> updated.any { it.id == id } } ?: updated.first().id
+        val activeId = preferences[activePromptIdKey]?.takeIf { id -> updated.any { it.id == id } } ?: updated.first().id
         storePrompts(preferences, updated, activeId)
     }
 
     suspend fun deletePrompt(id: String) = dataStore.edit { preferences ->
-        val prompts = decodePrompts(preferences[savedPrompts], preferences[llmPrompt])
+        val prompts = decodePrompts(preferences[savedPromptsKey])
         val prompt = prompts.firstOrNull { it.id == id } ?: return@edit
         if (prompt.isBuiltIn) return@edit
         val remaining = prompts.filterNot { it.id == id }
-        val activeId = if (preferences[activePromptId] == id) DEFAULT_PROMPT_ID else preferences[activePromptId] ?: DEFAULT_PROMPT_ID
+        val activeId = if (preferences[activePromptIdKey] == id) DEFAULT_PROMPT_ID else preferences[activePromptIdKey] ?: DEFAULT_PROMPT_ID
         storePrompts(preferences, remaining, activeId)
     }
     suspend fun saveAutoProcess(enabled: Boolean) = dataStore.edit { it[autoProcess] = enabled }
 
-    private fun decodePrompts(serialized: String?, legacyPrompt: String?): List<SavedPrompt> {
-        if (!serialized.isNullOrBlank()) {
-            val decoded = runCatching {
-                gson.fromJson<List<SavedPrompt>>(serialized, object : TypeToken<List<SavedPrompt>>() {}.type)
-            }.getOrNull().orEmpty()
-            if (decoded.isNotEmpty()) return decoded.ensureBuiltIn()
-        }
-        val oldPrompt = legacyPrompt?.takeIf(String::isNotBlank)
-        return if (oldPrompt == null || oldPrompt == DEFAULT_LLM_PROMPT) listOf(builtInPrompt())
-        else listOf(builtInPrompt(), SavedPrompt("migrated", "Migrated prompt", oldPrompt))
-    }
-
-    private fun List<SavedPrompt>.ensureBuiltIn(): List<SavedPrompt> =
-        if (any { it.id == DEFAULT_PROMPT_ID }) this else listOf(builtInPrompt()) + this
-
-    private fun storePrompts(preferences: MutablePreferences, prompts: List<SavedPrompt>, selectedId: String) {
-        val normalized = prompts.ensureBuiltIn()
-        preferences[savedPrompts] = gson.toJson(normalized)
-        preferences[activePromptId] = selectedId.takeIf { id -> normalized.any { it.id == id } } ?: DEFAULT_PROMPT_ID
-        preferences[llmPrompt] = normalized.first { it.id == preferences[activePromptId] }.content
-    }
 }

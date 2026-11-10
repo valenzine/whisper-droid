@@ -102,7 +102,9 @@ internal fun MainScreen(
     }
     LaunchedEffect(promptDraft) {
         delay(500)
-        if (promptDraft != appSettings.llmPrompt) settingsViewModel.saveLlmPrompt(promptDraft)
+        if (promptDraft != appSettings.llmPrompt) {
+            settingsViewModel.updatePrompt(appSettings.activePrompt.copy(content = promptDraft))
+        }
     }
     LaunchedEffect(screenState.phase) {
         val phase = screenState.phase
@@ -133,7 +135,7 @@ internal fun MainScreen(
                 horizontalArrangement = Arrangement.End
             ) {
                 IconButton(onClick = {
-                    settingsViewModel.saveLlmPrompt(promptDraft)
+                    settingsViewModel.updatePrompt(appSettings.activePrompt.copy(content = promptDraft))
                     navController.navigate("settings")
                 }) {
                     Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -233,7 +235,9 @@ internal fun MainScreen(
                         if (!appSettings.activePrompt.isBuiltIn) {
                             TextButton(onClick = {
                                 promptExpanded = !promptExpanded
-                                if (!promptExpanded) settingsViewModel.saveLlmPrompt(promptDraft)
+                                if (!promptExpanded) {
+                                    settingsViewModel.updatePrompt(appSettings.activePrompt.copy(content = promptDraft))
+                                }
                             }) {
                                 Text(if (promptExpanded) "Hide editor" else "Edit")
                             }
@@ -246,7 +250,9 @@ internal fun MainScreen(
                             label = { Text("Processing instruction") },
                             modifier = Modifier.fillMaxWidth().onFocusChanged {
                                 promptFocused = it.isFocused
-                                if (!it.isFocused) settingsViewModel.saveLlmPrompt(promptDraft)
+                                if (!it.isFocused) {
+                                    settingsViewModel.updatePrompt(appSettings.activePrompt.copy(content = promptDraft))
+                                }
                             },
                             minLines = 4
                         )
