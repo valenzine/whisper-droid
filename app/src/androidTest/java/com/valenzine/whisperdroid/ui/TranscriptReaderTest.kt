@@ -31,6 +31,24 @@ class TranscriptReaderTest {
     }
 
     @Test
+    fun rendersMarkdownAsNativeFormattedText() {
+        composeRule.setContent {
+            MaterialTheme {
+                TranscriptReader(
+                    text = "# Heading\n\n- *emphasized* item\n\n> quoted\n\n`code`",
+                    formatted = true,
+                    onBack = {}
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Heading").assertIsDisplayed()
+        composeRule.onNodeWithText("emphasized item").assertIsDisplayed()
+        composeRule.onNodeWithText("quoted").assertIsDisplayed()
+        composeRule.onNodeWithText("code").assertIsDisplayed()
+    }
+
+    @Test
     fun rendersFormattedTextAndReturnsToCaller() {
         var returned = false
         composeRule.setContent {

@@ -17,9 +17,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.TextView
+import io.noties.markwon.Markwon
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,13 +36,28 @@ internal fun TranscriptReader(text: String?, formatted: Boolean, onBack: () -> U
                 Text("This transcript is unavailable.")
             }
         } else {
+            val context = LocalContext.current
+            val markwon = remember(context) { Markwon.create(context) }
             Box(
                 Modifier.fillMaxSize().padding(insets).testTag("transcript-reader-scroll")
                     .verticalScroll(rememberScrollState()).padding(16.dp)
             ) {
-                SelectionContainer {
-                    Text(text, style = MaterialTheme.typography.bodyLarge)
-                }
+                AndroidView(
+                    factory = { context ->
+                        TextView(context).apply {
+                            setTextIsSelectable(true)
+                            textSize = 18f
+                            movementMethod = null
+                        }
+                    },
+                    update = { view ->
+                        if (view.tag != text) {
+                            markwon.setMarkdown(view, text)
+                            view.tag = text
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
     }
