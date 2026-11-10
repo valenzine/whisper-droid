@@ -84,8 +84,12 @@ internal fun TranscriptPane(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    if (selectedEdited) MarkdownTranscriptText(text, Modifier.fillMaxWidth())
-                    else SelectionContainer { Text(text, style = MaterialTheme.typography.bodyLarge) }
+                    val bodyStyle = MaterialTheme.typography.bodyLarge
+                    if (selectedEdited) {
+                        MarkdownTranscriptText(text, fontSize = bodyStyle.fontSize)
+                    } else {
+                        SelectionContainer { Text(text, style = bodyStyle) }
+                    }
                 }
             }
             if (hasTranscript && (isFormatting || !hasEdited || selectedEdited)) {

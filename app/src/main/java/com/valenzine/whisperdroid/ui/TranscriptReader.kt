@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -66,7 +67,7 @@ internal fun TranscriptReader(
 internal fun MarkdownTranscriptText(
     text: String,
     modifier: Modifier = Modifier,
-    fontSizeSp: Float = 18f
+    fontSize: TextUnit = 18.sp
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -97,7 +98,7 @@ internal fun MarkdownTranscriptText(
             .build()
     }
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-    val textSizePx = with(density) { fontSizeSp.sp.toPx() }
+    val textSizePx = with(density) { fontSize.toPx() }
     AndroidView(
         factory = { context ->
             TextView(context).apply {

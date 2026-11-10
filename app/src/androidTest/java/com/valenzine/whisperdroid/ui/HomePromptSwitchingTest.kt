@@ -1,5 +1,6 @@
 package com.valenzine.whisperdroid.ui
 
+import android.widget.TextView
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -15,6 +16,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.valenzine.whisperdroid.MainActivity
 import com.valenzine.whisperdroid.WhisperDroidApplication
 import com.valenzine.whisperdroid.repository.DEFAULT_PROMPT_ID
+import com.valenzine.whisperdroid.ui.theme.Typography
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -50,7 +52,11 @@ class HomePromptSwitchingTest {
             composeRule.onNodeWithText("Transcript").performClick()
             composeRule.onNodeWithText("Saved transcript.").assertIsDisplayed()
             composeRule.onNodeWithText("Tidy up").performClick()
-            onView(withText("Cleaned text")).check(matches(isDisplayed()))
+            val transcriptBodySize = with(composeRule.density) { Typography.bodyLarge.fontSize.toPx() }
+            onView(withText("Cleaned text")).check { view, error ->
+                if (error != null) throw error
+                assertEquals(transcriptBodySize, (view as TextView).textSize, 0.1f)
+            }
             composeRule.onNodeWithContentDescription("Open full screen").performClick()
             onView(withText("Cleaned text")).check(matches(isDisplayed()))
             composeRule.onNodeWithContentDescription("Back").performClick()
