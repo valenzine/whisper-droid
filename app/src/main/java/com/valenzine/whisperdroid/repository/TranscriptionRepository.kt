@@ -418,7 +418,7 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
                 )
             ),
             messages = listOf(
-                Message("system", "Edit the transcript as requested. Return JSON only. The summary must be one concise sentence describing the transcript, without copying it verbatim."),
+                Message("system", "Apply the requested edit to the transcript and return it in the JSON text field. In the summary field, write one concise sentence describing the transcript in its original language. Do not copy it verbatim or invent details."),
                 Message("user", userPrompt)
             )
         )
@@ -432,7 +432,7 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
                 response.choices.first().message.content,
                 object : TypeToken<Map<String, String>>() {}.type
             )
-        }.getOrElse { throw IllegalStateException("Formatting response could not be read.") }
+        }.getOrNull() ?: throw IllegalStateException("Formatting response could not be read.")
         val formattedText = payload["text"]?.replace("\r\n", "\n")?.trim()
             ?: throw IllegalStateException("Formatting response did not include text.")
         require(formattedText.isNotBlank()) { "Formatting response did not include text." }
