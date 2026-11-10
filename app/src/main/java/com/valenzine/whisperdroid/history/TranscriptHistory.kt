@@ -29,6 +29,9 @@ interface TranscriptHistoryDao {
     @Query("SELECT * FROM TranscriptEntry ORDER BY updatedAt DESC, id DESC")
     fun entries(): Flow<List<TranscriptEntry>>
 
+    @Query("SELECT * FROM TranscriptEntry ORDER BY updatedAt DESC, id DESC LIMIT 1")
+    suspend fun latest(): TranscriptEntry?
+
     @Query("SELECT * FROM TranscriptEntry WHERE audioFingerprint = :fingerprint LIMIT 1")
     suspend fun findByFingerprint(fingerprint: String): TranscriptEntry?
 
@@ -63,6 +66,8 @@ abstract class TranscriptHistoryDatabase : RoomDatabase() {
 
 class TranscriptHistoryRepository(private val dao: TranscriptHistoryDao) {
     val entries: Flow<List<TranscriptEntry>> = dao.entries()
+
+    suspend fun latest() = dao.latest()
 
     suspend fun find(fingerprint: String) = dao.findByFingerprint(fingerprint)
 

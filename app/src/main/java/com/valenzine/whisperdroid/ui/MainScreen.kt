@@ -16,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
@@ -24,39 +23,32 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import android.net.Uri
 import androidx.compose.ui.focus.onFocusChanged
+import com.valenzine.whisperdroid.WhisperDroidApplication
 import com.valenzine.whisperdroid.model.DEFAULT_LLM_PROMPT
-import com.valenzine.whisperdroid.repository.SettingsRepository
-import com.valenzine.whisperdroid.history.TranscriptHistoryDatabase
-import com.valenzine.whisperdroid.history.TranscriptHistoryRepository
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModelFactory
 import com.valenzine.whisperdroid.viewmodel.TranscriptionUiState
-import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModel
-import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModelFactory
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(
-    navController: NavController,
-    sharedAudioUri: Uri? = null,
-    onSharedAudioConsumed: () -> Unit = {}
-) {
-    val context = LocalContext.current
-    val repository = remember { com.valenzine.whisperdroid.repository.TranscriptionRepository(context) }
-    val settingsRepository = remember { SettingsRepository(context) }
-    val historyRepository = remember { TranscriptHistoryRepository(TranscriptHistoryDatabase.create(context).transcriptHistoryDao()) }
-    val viewModel: TranscriptionViewModel = viewModel(factory = TranscriptionViewModelFactory(repository, settingsRepository, historyRepository))
-    val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(settingsRepository))
+internal fun MainScreen(navController: NavController, app: WhisperDroidApplication) {
+    val viewModel = app.transcription
+    val audioSession = app.audioSession
+    val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(app.settings))
     val screenState by viewModel.screenState.collectAsState()
     val appSettings by settingsViewModel.settings.collectAsState()
-    val historyEntries by historyRepository.entries.collectAsState(initial = emptyList())
+    val historyEntries by app.history.entries.collectAsState(initial = emptyList())
     val transcription = screenState.transcription
     val formattedText = screenState.formattedText
     val uiState = screenState.phase
     val snackbarHostState = remember { SnackbarHostState() }
+    val screenScope = rememberCoroutineScope()
+    LaunchedEffect(viewModel) {
+        viewModel.audioErrorMessages.collect { snackbarHostState.showSnackbar(it) }
+    }
 
     val languageOptions = listOf("Automatic", "English", "Spanish", "Italian")
     val languageCodes = mapOf(
@@ -67,24 +59,26 @@ fun MainScreen(
     )
 
     var languageDropdownExpanded by remember { mutableStateOf(false) }
-    var selectedLanguage by remember { mutableStateOf("Automatic") }
-
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { viewModel.transcribeUri(it, languageCodes[selectedLanguage]) }
-    }
-    var retranscribeEntry by remember { mutableStateOf<com.valenzine.whisperdroid.history.TranscriptEntry?>(null) }
-    val retranscribeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        retranscribeEntry?.let { entry -> uri?.let { viewModel.retranscribeUri(entry, it, languageCodes[selectedLanguage]) } }
-        retranscribeEntry = null
+    var selectedLanguage by rememberSaveable {
+        mutableStateOf(languageOptions.first { languageCodes[it] == audioSession.shareLanguage })
     }
 
-    LaunchedEffect(sharedAudioUri, screenState.isBusy, appSettings.apiKey) {
-        sharedAudioUri?.let { uri ->
-            viewModel.transcribeUri(uri, languageCodes[selectedLanguage], onSharedAudioConsumed)
+    fun enqueueAudio(uri: Uri, expectedFingerprint: String? = null) {
+        if (audioSession.enqueue(uri, languageCodes[selectedLanguage], expectedFingerprint) == null) {
+            screenScope.launch { snackbarHostState.showSnackbar("The audio queue is full. Select this audio again later.") }
         }
     }
 
-    var activeTabIndex by remember { mutableIntStateOf(0) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let { enqueueAudio(it) }
+    }
+    var retranscribeFingerprint by rememberSaveable { mutableStateOf<String?>(null) }
+    val retranscribeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        retranscribeFingerprint?.let { fingerprint -> uri?.let { enqueueAudio(it, fingerprint) } }
+        retranscribeFingerprint = null
+    }
+
+    var activeTabIndex by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf("Transcription", "Formatted")
     var transcriptionHeight by remember { mutableStateOf(150.dp) }
     var formattedHeight by remember { mutableStateOf(150.dp) }
@@ -161,6 +155,7 @@ fun MainScreen(
                             text = { Text(option) },
                             onClick = {
                                 selectedLanguage = option
+                                audioSession.shareLanguage = languageCodes[option]
                                 languageDropdownExpanded = false
                             }
                         )
@@ -170,7 +165,7 @@ fun MainScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Button(onClick = { launcher.launch("audio/*") }, enabled = !screenState.isBusy) {
+            Button(onClick = { launcher.launch("audio/*") }) {
                 Text("Select Audio File")
             }
 
@@ -218,18 +213,18 @@ fun MainScreen(
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             Text("History", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            TextButton(onClick = { clearHistoryConfirmation = true }) { Text("Clear all") }
+                            TextButton(onClick = { clearHistoryConfirmation = true }, enabled = !screenState.isBusy) { Text("Clear all") }
                         }
                         historyEntries.forEach { entry ->
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                                TextButton(onClick = { viewModel.showHistoryEntry(entry) }, modifier = Modifier.weight(1f)) {
+                                TextButton(onClick = { viewModel.showHistoryEntry(entry) }, enabled = !screenState.isBusy, modifier = Modifier.weight(1f)) {
                                     Text(entry.displayName, maxLines = 1)
                                 }
                                 TextButton(onClick = {
-                                    retranscribeEntry = entry
+                                    retranscribeFingerprint = entry.audioFingerprint
                                     retranscribeLauncher.launch("audio/*")
                                 }) { Text("Re-transcribe") }
-                                TextButton(onClick = { viewModel.deleteHistoryEntry(entry.id) }) { Text("Clear") }
+                                TextButton(onClick = { viewModel.deleteHistoryEntry(entry.id) }, enabled = !screenState.isBusy) { Text("Clear") }
                             }
                         }
                     }
@@ -368,6 +363,9 @@ fun MainScreen(
                         CircularProgressIndicator(modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Transcribing audio...")
+                    }
+                    TranscriptionUiState.WaitingForApiKey -> {
+                        Text("Add an OpenAI API key in Settings to continue.")
                     }
                     is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.FormattingText -> {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp))

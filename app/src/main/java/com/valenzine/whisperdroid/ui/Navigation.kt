@@ -1,25 +1,16 @@
 package com.valenzine.whisperdroid.ui
 
-import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.valenzine.whisperdroid.WhisperDroidApplication
 
 @Composable
-fun Navigation(
-    sharedAudioUri: Uri? = null,
-    onSharedAudioConsumed: () -> Unit = {}
-) {
+internal fun Navigation(app: WhisperDroidApplication) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = "main") {
-        composable("main") {
-            MainScreen(
-                navController = navController,
-                sharedAudioUri = sharedAudioUri,
-                onSharedAudioConsumed = onSharedAudioConsumed
-            )
-        }
+        composable("main") { MainScreen(navController, app) }
         composable("settings") { SettingsScreen() }
     }
 }
