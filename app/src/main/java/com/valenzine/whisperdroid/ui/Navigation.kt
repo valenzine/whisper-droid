@@ -49,6 +49,11 @@ internal fun Navigation(app: WhisperDroidApplication) {
             }
         }
         composable("settings") { SettingsScreen() }
+        composable("history") {
+            HistoryScreen(navController, app) { id, formatted ->
+                navController.navigate("reader/$id/$formatted")
+            }
+        }
     }
 }
 

@@ -44,7 +44,6 @@ internal fun MainScreen(
     val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(app.settings))
     val screenState by viewModel.screenState.collectAsState()
     val appSettings by settingsViewModel.settings.collectAsState()
-    val historyEntries by app.history.entries.collectAsState(initial = emptyList())
     val transcription = screenState.transcription
     val formattedText = screenState.formattedText
     val uiState = screenState.phase
@@ -76,11 +75,6 @@ internal fun MainScreen(
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { enqueueAudio(it) }
     }
-    var retranscribeFingerprint by rememberSaveable { mutableStateOf<String?>(null) }
-    val retranscribeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        retranscribeFingerprint?.let { fingerprint -> uri?.let { enqueueAudio(it, fingerprint) } }
-        retranscribeFingerprint = null
-    }
 
     var activeTabIndex by rememberSaveable { mutableIntStateOf(0) }
     var lastDisplayedResult by rememberSaveable { mutableStateOf<String?>(null) }
@@ -92,7 +86,7 @@ internal fun MainScreen(
     var promptDraft by rememberSaveable { mutableStateOf(appSettings.llmPrompt) }
     var editingPromptId by rememberSaveable { mutableStateOf(appSettings.activePromptId) }
     var promptFocused by remember { mutableStateOf(false) }
-    var clearHistoryConfirmation by remember { mutableStateOf(false) }
+    var promptEditorVisible by rememberSaveable { mutableStateOf(false) }
     var promptMenuExpanded by remember { mutableStateOf(false) }
     var showCreatePrompt by remember { mutableStateOf(false) }
     var showRenamePrompt by remember { mutableStateOf(false) }
@@ -134,6 +128,7 @@ internal fun MainScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
+                TextButton(onClick = { navController.navigate("history") }) { Text("History") }
                 IconButton(onClick = {
                     settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
                     navController.navigate("settings")
@@ -192,11 +187,25 @@ internal fun MainScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Processing", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "${appSettings.activePrompt.name} · ${if (appSettings.autoProcess) "Automatic" else "Manual"}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        TextButton(onClick = { promptExpanded = !promptExpanded }) {
+                            Text(if (promptExpanded) "Done" else "Manage")
+                        }
+                    }
+                    if (promptExpanded) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text("Automatically process after transcription", modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = appSettings.autoProcess,
-                            onCheckedChange = settingsViewModel::setAutoProcess
-                        )
+                        Switch(checked = appSettings.autoProcess, onCheckedChange = settingsViewModel::setAutoProcess)
                     }
                     ExposedDropdownMenuBox(
                         expanded = promptMenuExpanded,
@@ -220,6 +229,7 @@ internal fun MainScreen(
                                     onClick = {
                                         promptFocused = false
                                         promptExpanded = false
+                                        promptEditorVisible = false
                                         settingsViewModel.selectPrompt(prompt.id)
                                         promptMenuExpanded = false
                                     }
@@ -235,17 +245,12 @@ internal fun MainScreen(
                         }
                         Spacer(modifier = Modifier.weight(1f))
                         if (!appSettings.activePrompt.isBuiltIn) {
-                            TextButton(onClick = {
-                                promptExpanded = !promptExpanded
-                                if (!promptExpanded) {
-                                    settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
-                                }
-                            }) {
-                                Text(if (promptExpanded) "Hide editor" else "Edit")
+                            TextButton(onClick = { promptEditorVisible = !promptEditorVisible }) {
+                                Text(if (promptEditorVisible) "Hide editor" else "Edit")
                             }
                         }
                     }
-                    if (promptExpanded) {
+                    if (!appSettings.activePrompt.isBuiltIn && promptEditorVisible) {
                         OutlinedTextField(
                             value = promptDraft,
                             onValueChange = { promptDraft = it },
@@ -262,35 +267,6 @@ internal fun MainScreen(
                             Text("Reset to default prompt")
                         }
                     }
-                }
-            }
-
-            if (historyEntries.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(16.dp))
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                            Text("History", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            TextButton(onClick = { clearHistoryConfirmation = true }, enabled = !screenState.isBusy) { Text("Clear all") }
-                        }
-                        historyEntries.forEach { entry ->
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                                TextButton(onClick = { viewModel.showHistoryEntry(entry) }, enabled = !screenState.isBusy, modifier = Modifier.weight(1f)) {
-                                    Text(entry.displayName, maxLines = 1)
-                                }
-                                TextButton(onClick = {
-                                    retranscribeFingerprint = entry.audioFingerprint
-                                    retranscribeLauncher.launch("audio/*")
-                                }) { Text("Re-transcribe") }
-                                TextButton(onClick = { viewModel.deleteHistoryEntry(entry.id) }, enabled = !screenState.isBusy) { Text("Clear") }
-                            }
-                            Row {
-                                TextButton(onClick = { openReader(entry.id, false) }) { Text("Read raw") }
-                                if (entry.formattedText.isNotBlank()) {
-                                    TextButton(onClick = { openReader(entry.id, true) }) { Text("Read formatted") }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -307,10 +283,23 @@ internal fun MainScreen(
 
             val currentEntry = screenState.historyEntryId
             val selectedText = if (activeTabIndex == 0) transcription else formattedText
-            if (currentEntry != null && selectedText.isNotBlank()) {
-                TextButton(onClick = { openReader(currentEntry, activeTabIndex == 1) }) {
-                    Text("Full screen")
+            val clipboardManager = LocalClipboardManager.current
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (currentEntry != null && selectedText.isNotBlank()) {
+                    TextButton(onClick = { openReader(currentEntry, activeTabIndex == 1) }) { Text("Full screen") }
                 }
+                Button(
+                    onClick = { viewModel.formatText() },
+                    enabled = transcription.isNotBlank() && !screenState.isBusy
+                ) { Text("Format") }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(selectedText))
+                        screenScope.launch { snackbarHostState.showSnackbar("Copied to clipboard") }
+                    },
+                    enabled = selectedText.isNotBlank()
+                ) { Text("Copy") }
             }
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -365,28 +354,6 @@ internal fun MainScreen(
                         .height(4.dp)
                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
                 )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            val clipboardManager = LocalClipboardManager.current
-            val coroutineScope = rememberCoroutineScope()
-
-            Row {
-                Button(onClick = {
-                    viewModel.formatText()
-                }, enabled = transcription.isNotBlank() && !screenState.isBusy) {
-                    Text("Format Text")
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Button(onClick = {
-                    clipboardManager.setText(AnnotatedString(selectedText))
-                    coroutineScope.launch { snackbarHostState.showSnackbar("Copied to clipboard") }
-                }, enabled = selectedText.isNotBlank()) {
-                    Text("Copy")
-                }
             }
 
         }
@@ -470,20 +437,6 @@ internal fun MainScreen(
             }
         }
     }
-    if (clearHistoryConfirmation) {
-        AlertDialog(
-            onDismissRequest = { clearHistoryConfirmation = false },
-            title = { Text("Clear transcription history?") },
-            text = { Text("This removes all saved transcriptions and their duplicate detection records.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.clearHistory()
-                    clearHistoryConfirmation = false
-                }) { Text("Clear all") }
-            },
-            dismissButton = { TextButton(onClick = { clearHistoryConfirmation = false }) { Text("Cancel") } }
-        )
-    }
 
     if (showCreatePrompt) {
         PromptDialog(
@@ -496,6 +449,7 @@ internal fun MainScreen(
                 settingsViewModel.createPrompt(name, content)
                 showCreatePrompt = false
                 promptExpanded = false
+                promptEditorVisible = false
             }
         )
     }
@@ -523,6 +477,7 @@ internal fun MainScreen(
                     settingsViewModel.deletePrompt(appSettings.activePrompt.id)
                     showDeletePrompt = false
                     promptExpanded = false
+                    promptEditorVisible = false
                 }) { Text("Delete") }
             },
             dismissButton = { TextButton(onClick = { showDeletePrompt = false }) { Text("Cancel") } }

@@ -15,10 +15,19 @@ class MainScreenControlsTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun processingControlsExposeTheActivePromptChooser() {
+    fun processingControlsExpandOnlyWhenManaged() {
+        composeRule.onNodeWithText("Processing").assertIsDisplayed()
+        composeRule.onNodeWithText("Default prompt").assertIsDisplayed()
+        composeRule.onNodeWithText("Manage").performClick()
         composeRule.onNodeWithText("Automatically process after transcription").assertIsDisplayed()
         composeRule.onNodeWithText("Active processing prompt").assertIsDisplayed()
-        composeRule.onNodeWithText("Default prompt").assertIsDisplayed()
         composeRule.onNodeWithText("New prompt").assertIsDisplayed()
+    }
+
+    @Test
+    fun historyOpensAsASeparateDestination() {
+        composeRule.onNodeWithText("History").performClick()
+
+        composeRule.onNodeWithText("No saved transcriptions yet.").assertIsDisplayed()
     }
 }
