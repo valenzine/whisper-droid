@@ -73,7 +73,7 @@ class TranscriptReaderTest {
     @Test
     fun alignsWrappedAndNestedMarkdownLists() {
         val wrappedItem = "A long first bullet " + "with enough words to wrap on a phone ".repeat(6)
-        val markdown = "- $wrappedItem\n  - Nested bullet\n- Another bullet\n\n1. First step\n2. Second step"
+        val markdown = "Overview\n\n- $wrappedItem\n  - Nested bullet\n- Another bullet\n\n1. First step\n2. Second step"
         composeRule.setContent {
             MaterialTheme { TranscriptReader(text = markdown, formatted = true, onBack = {}) }
         }
@@ -89,10 +89,13 @@ class TranscriptReaderTest {
 
             assertEquals(3, rendered.getSpans(0, rendered.length, BulletListItemSpan::class.java).size)
             assertEquals(2, rendered.getSpans(0, rendered.length, OrderedListItemSpan::class.java).size)
+            fun textStart(line: Int) = layout.getPrimaryHorizontal(layout.getLineStart(line))
+
             assertTrue(nestedLine > firstLine + 1)
-            assertEquals(layout.getLineLeft(firstLine), layout.getLineLeft(firstLine + 1), 1f)
-            assertTrue(layout.getLineLeft(nestedLine) > layout.getLineLeft(firstLine))
-            assertEquals(layout.getLineLeft(firstLine), layout.getLineLeft(numberedLine), 1f)
+            assertTrue(textStart(firstLine) > textStart(0))
+            assertEquals(textStart(firstLine), textStart(firstLine + 1), 1f)
+            assertTrue(textStart(nestedLine) > textStart(firstLine))
+            assertEquals(textStart(firstLine), textStart(numberedLine), 1f)
         }
     }
 
