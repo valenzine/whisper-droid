@@ -18,13 +18,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -40,8 +39,8 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun TranscriptPane(
     rawText: String,
-    formattedText: String,
-    selectedFormatted: Boolean,
+    editedText: String,
+    selectedEdited: Boolean,
     onSelectFormatted: (Boolean) -> Unit,
     textHeight: Dp,
     onExpand: (() -> Unit)?,
@@ -49,10 +48,10 @@ internal fun TranscriptPane(
     isBusy: Boolean,
     isFormatting: Boolean = false
 ) {
-    val text = if (selectedFormatted) formattedText else rawText
-    val label = if (selectedFormatted) "Formatted text" else "Raw transcription"
+    val text = if (selectedEdited) editedText else rawText
+    val label = if (selectedEdited) "Edited text" else "Transcript"
     val hasTranscript = rawText.isNotBlank()
-    val hasFormatted = formattedText.isNotBlank()
+    val hasEdited = editedText.isNotBlank()
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column {
             if (hasTranscript) {
@@ -60,21 +59,13 @@ internal fun TranscriptPane(
                     modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
-                        SegmentedButton(
-                            selected = !selectedFormatted,
-                            onClick = { onSelectFormatted(false) },
-                            shape = SegmentedButtonDefaults.itemShape(0, 2),
-                            icon = {},
-                            contentPadding = PaddingValues(horizontal = 8.dp)
-                        ) { Text("Raw") }
-                        SegmentedButton(
-                            selected = selectedFormatted,
-                            onClick = { onSelectFormatted(true) },
-                            shape = SegmentedButtonDefaults.itemShape(1, 2),
-                            icon = {},
-                            contentPadding = PaddingValues(horizontal = 8.dp)
-                        ) { Text("Formatted") }
+                    PrimaryTabRow(
+                        selectedTabIndex = if (selectedEdited) 1 else 0,
+                        modifier = Modifier.weight(1f),
+                        divider = {}
+                    ) {
+                        Tab(selected = !selectedEdited, onClick = { onSelectFormatted(false) }, text = { Text("Transcript") })
+                        Tab(selected = selectedEdited, onClick = { onSelectFormatted(true) }, text = { Text("Edited") })
                     }
                     CopyTranscriptButton(text, label)
                     IconButton(enabled = onExpand != null && text.isNotBlank(), onClick = { onExpand?.invoke() }) {
@@ -89,16 +80,15 @@ internal fun TranscriptPane(
             ) {
                 if (text.isBlank()) {
                     Text(
-                        if (hasTranscript) "No formatted text yet." else "Your transcription will appear here.",
+                        if (hasTranscript) "No saved edit for this prompt." else "Your transcription will appear here.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    SelectionContainer {
-                        Text(text, style = MaterialTheme.typography.bodyLarge)
-                    }
+                    if (selectedEdited) MarkdownTranscriptText(text, Modifier.fillMaxWidth())
+                    else SelectionContainer { Text(text, style = MaterialTheme.typography.bodyLarge) }
                 }
             }
-            if (hasTranscript && (isFormatting || !hasFormatted || selectedFormatted)) {
+            if (hasTranscript && (isFormatting || !hasEdited || selectedEdited)) {
                 HorizontalDivider()
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -108,10 +98,10 @@ internal fun TranscriptPane(
                     when {
                         isFormatting -> {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Text("Formatting…", modifier = Modifier.padding(vertical = 12.dp))
+                            Text("Editing…", modifier = Modifier.padding(vertical = 12.dp))
                         }
-                        hasFormatted -> TextButton(onClick = { onFormat() }, enabled = !isBusy) { Text("Reformat") }
-                        else -> Button(onClick = { onFormat() }, enabled = !isBusy) { Text("Format") }
+                        hasEdited -> TextButton(onClick = { onFormat() }, enabled = !isBusy) { Text("Run again") }
+                        else -> Button(onClick = { onFormat() }, enabled = !isBusy) { Text("Edit transcript") }
                     }
                 }
             }

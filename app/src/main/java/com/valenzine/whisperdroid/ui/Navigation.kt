@@ -13,6 +13,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.valenzine.whisperdroid.WhisperDroidApplication
+import com.valenzine.whisperdroid.history.PREVIOUS_RESULT_PROMPT_ID
 
 @Composable
 internal fun Navigation(app: WhisperDroidApplication) {
@@ -24,8 +25,9 @@ internal fun Navigation(app: WhisperDroidApplication) {
             BackHandler(enabled = activity?.isTaskRoot == true && currentEntry?.destination?.route == "main") {
                 activity?.let { if (!it.moveTaskToBack(false)) it.finish() }
             }
-            MainScreen(navController, app) { id, formatted ->
-                navController.navigate("reader/$id/$formatted")
+            MainScreen(navController, app) { id, formatted, promptId ->
+                val promptQuery = promptId?.let { "?prompt=${Uri.encode(it)}" }.orEmpty()
+                navController.navigate("reader/$id/$formatted$promptQuery")
             }
         }
         composable(
@@ -52,7 +54,8 @@ internal fun Navigation(app: WhisperDroidApplication) {
                 } else {
                     app.history.results(id).collect { results ->
                         val result = results.firstOrNull { it.promptId == promptId }
-                        value = ReaderEntryState.Loaded(result?.formattedText, result?.promptName)
+                        val title = if (promptId == PREVIOUS_RESULT_PROMPT_ID) "Earlier edit" else result?.promptName
+                        value = ReaderEntryState.Loaded(result?.formattedText, title)
                     }
                 }
             }

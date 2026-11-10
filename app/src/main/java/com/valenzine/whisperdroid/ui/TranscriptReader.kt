@@ -1,6 +1,7 @@
 package com.valenzine.whisperdroid.ui
 
 import android.text.style.UnderlineSpan
+import android.util.TypedValue
 import android.widget.TextView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,6 +28,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
@@ -43,72 +45,82 @@ internal fun TranscriptReader(
     promptName: String? = null,
     onBack: () -> Unit
 ) {
-    val title = promptName ?: if (formatted) "Formatted text" else "Raw transcription"
+    val title = promptName ?: if (formatted) "Edited" else "Transcript"
     ReaderScaffold(title, text, onBack) { insets ->
         if (text == null) {
             Box(Modifier.fillMaxSize().padding(insets).padding(16.dp)) {
                 Text("This transcript is unavailable.")
             }
         } else {
-            val context = LocalContext.current
-            val density = LocalDensity.current
-            val markerColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
-            val dividerColor = MaterialTheme.colorScheme.outlineVariant.toArgb()
-            val lineSpacing = with(density) { 3.dp.toPx() }
-            val markwon = remember(context, density, markerColor, dividerColor) {
-                Markwon.builderNoCore(context)
-                    .usePlugin(CorePlugin.create().hasExplicitMovementMethod(true))
-                    .usePlugin(object : AbstractMarkwonPlugin() {
-                        override fun configureTheme(builder: MarkwonTheme.Builder) {
-                            with(density) {
-                                builder
-                                    .bulletWidth(5.dp.roundToPx())
-                                    .bulletListItemStrokeWidth(1.dp.roundToPx())
-                                    .listItemColor(markerColor)
-                                    .blockQuoteWidth(2.dp.roundToPx())
-                                    .blockQuoteColor(dividerColor)
-                                    .headingBreakColor(dividerColor)
-                                    .headingTextSizeMultipliers(floatArrayOf(1.5f, 1.28f, 1.12f, 1f, 1f, 1f))
-                            }
-                        }
-
-                        override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
-                            builder.setFactory(Link::class.java) { _, _ -> UnderlineSpan() }
-                        }
-                    })
-                    .build()
-            }
-            val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
             Box(
                 Modifier.fillMaxSize().padding(insets).testTag("transcript-reader-scroll")
                     .verticalScroll(rememberScrollState()).padding(16.dp)
             ) {
-                AndroidView(
-                    factory = { context ->
-                        TextView(context).apply {
-                            setTextIsSelectable(true)
-                            textSize = 18f
-                        }
-                    },
-                    update = { view ->
-                        view.setTextColor(textColor)
-                        view.setLineSpacing(lineSpacing, 1f)
-                        val render = markwon to text
-                        if (view.tag != render) {
-                            markwon.setMarkdown(view, text)
-                            view.tag = render
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                MarkdownTranscriptText(text)
             }
         }
     }
 }
 
 @Composable
+internal fun MarkdownTranscriptText(
+    text: String,
+    modifier: Modifier = Modifier,
+    fontSizeSp: Float = 18f
+) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val markerColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.toArgb()
+    val lineSpacing = with(density) { 3.dp.toPx() }
+    val markwon = remember(context, density, markerColor, dividerColor) {
+        Markwon.builderNoCore(context)
+            .usePlugin(CorePlugin.create().hasExplicitMovementMethod(true))
+            .usePlugin(object : AbstractMarkwonPlugin() {
+                override fun configureTheme(builder: MarkwonTheme.Builder) {
+                    with(density) {
+                        builder
+                            .bulletWidth(5.dp.roundToPx())
+                            .bulletListItemStrokeWidth(1.dp.roundToPx())
+                            .listItemColor(markerColor)
+                            .blockQuoteWidth(2.dp.roundToPx())
+                            .blockQuoteColor(dividerColor)
+                            .headingBreakColor(dividerColor)
+                            .headingTextSizeMultipliers(floatArrayOf(1.5f, 1.28f, 1.12f, 1f, 1f, 1f))
+                    }
+                }
+
+                override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
+                    builder.setFactory(Link::class.java) { _, _ -> UnderlineSpan() }
+                }
+            })
+            .build()
+    }
+    val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    val textSizePx = with(density) { fontSizeSp.sp.toPx() }
+    AndroidView(
+        factory = { context ->
+            TextView(context).apply {
+                setTextIsSelectable(true)
+            }
+        },
+        update = { view ->
+            if (view.textSize != textSizePx) view.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
+            view.setTextColor(textColor)
+            view.setLineSpacing(lineSpacing, 1f)
+            val render = Triple(markwon, text, textSizePx)
+            if (view.tag != render) {
+                markwon.setMarkdown(view, text)
+                view.tag = render
+            }
+        },
+        modifier = modifier.fillMaxWidth()
+    )
+}
+
+@Composable
 internal fun TranscriptReaderLoading(formatted: Boolean, onBack: () -> Unit) {
-    val title = if (formatted) "Formatted text" else "Raw transcription"
+    val title = if (formatted) "Edited" else "Transcript"
     ReaderScaffold(title, null, onBack) { insets ->
         Box(Modifier.fillMaxSize().padding(insets).padding(16.dp)) {
             Text("Loading transcript…")

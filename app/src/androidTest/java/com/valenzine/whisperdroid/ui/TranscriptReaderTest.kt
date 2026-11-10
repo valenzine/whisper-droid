@@ -40,7 +40,7 @@ class TranscriptReaderTest {
             }
         }
 
-        composeRule.onNodeWithText("Raw transcription").assertIsDisplayed()
+        composeRule.onNodeWithText("Transcript").assertIsDisplayed()
         onView(withText("Raw dictation")).check(matches(isDisplayed()))
     }
 
@@ -108,7 +108,7 @@ class TranscriptReaderTest {
             }
         }
 
-        composeRule.onNodeWithText("Formatted text").assertIsDisplayed()
+        composeRule.onNodeWithText("Edited").assertIsDisplayed()
         onView(withText("Formatted paragraph.")).check(matches(isDisplayed()))
         composeRule.onNodeWithContentDescription("Back").performClick()
         composeRule.runOnIdle { assertTrue(returned) }
@@ -130,8 +130,8 @@ class TranscriptReaderTest {
             MaterialTheme {
                 TranscriptPane(
                     rawText = "Raw dictation",
-                    formattedText = "",
-                    selectedFormatted = false,
+                    editedText = "",
+                    selectedEdited = false,
                     onSelectFormatted = {},
                     textHeight = 150.dp,
                     onExpand = { expanded = true },

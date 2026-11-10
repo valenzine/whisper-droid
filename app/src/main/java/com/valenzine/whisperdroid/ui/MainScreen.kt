@@ -30,6 +30,7 @@ import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModelFactory
 import com.valenzine.whisperdroid.viewmodel.TranscriptionUiState
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.flowOf
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,7 +38,7 @@ import java.util.Locale
 internal fun MainScreen(
     navController: NavController,
     app: WhisperDroidApplication,
-    openReader: (id: Long, formatted: Boolean) -> Unit
+    openReader: (id: Long, formatted: Boolean, promptId: String?) -> Unit
 ) {
     val viewModel = app.transcription
     val audioSession = app.audioSession
@@ -76,24 +77,28 @@ internal fun MainScreen(
         uri?.let { enqueueAudio(it) }
     }
 
-    var activeTabIndex by rememberSaveable { mutableIntStateOf(0) }
-    var lastDisplayedResult by rememberSaveable { mutableStateOf<String?>(null) }
     var transcriptionHeight by remember { mutableStateOf(150.dp) }
     var formattedHeight by remember { mutableStateOf(150.dp) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     val currentEntry = screenState.historyEntryId
-    val formattingCurrent = uiState is TranscriptionUiState.FormattingText &&
-        (screenState.formattingEntryId == null || screenState.formattingEntryId == currentEntry)
-    LaunchedEffect(uiState, currentEntry) {
-        if (formattingCurrent && formattedText.isBlank()) activeTabIndex = 0
-        if (uiState is TranscriptionUiState.Success) {
-            val result = "${screenState.historyEntryId}:${uiState.hashCode()}"
-            if (lastDisplayedResult != result) {
-                activeTabIndex = if (uiState.formattedText == null) 0 else 1
-                lastDisplayedResult = result
-            }
-        }
+    val allPromptResults by remember(currentEntry) {
+        currentEntry?.let(app.history::results) ?: flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
+    val promptResults = allPromptResults.filter { it.entryId == currentEntry }
+    var pendingPromptId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedPromptId = pendingPromptId
+        ?.takeIf { id -> appSettings.prompts.any { it.id == id } }
+        ?: appSettings.activePromptId
+    LaunchedEffect(appSettings.activePromptId) {
+        if (pendingPromptId == appSettings.activePromptId) pendingPromptId = null
     }
+
+    val selectedResult = promptResults.firstOrNull { it.promptId == selectedPromptId }
+    var selectedTab by rememberSaveable(currentEntry) { mutableStateOf<Boolean?>(null) }
+    val isEdited = selectedTab ?: (selectedResult != null)
+    val formattingCurrent = uiState is TranscriptionUiState.FormattingText &&
+        (screenState.formattingEntryId == null || screenState.formattingEntryId == currentEntry) &&
+        (screenState.formattingPromptId == null || screenState.formattingPromptId == selectedPromptId)
 
     Column(
         modifier = Modifier
@@ -189,11 +194,16 @@ internal fun MainScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Prompt", style = MaterialTheme.typography.labelLarge)
                 appSettings.prompts.forEach { prompt ->
                     FilterChip(
-                        selected = prompt.id == appSettings.activePromptId,
-                        onClick = { settingsViewModel.selectPrompt(prompt.id) },
+                        selected = prompt.id == selectedPromptId,
+                        onClick = {
+                            if (pendingPromptId != null || prompt.id != appSettings.activePromptId) {
+                                pendingPromptId = prompt.id
+                                settingsViewModel.selectPrompt(prompt.id)
+                            }
+                            selectedTab = true
+                        },
                         label = { Text(prompt.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         shape = CircleShape,
                         modifier = Modifier.widthIn(max = 160.dp)
@@ -203,16 +213,21 @@ internal fun MainScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            val isFormatted = activeTabIndex == 1
-            key(activeTabIndex, currentEntry) {
+            key(isEdited, currentEntry, selectedPromptId.takeIf { isEdited }) {
                 TranscriptPane(
                     rawText = transcription,
-                    formattedText = formattedText,
-                    selectedFormatted = isFormatted,
-                    onSelectFormatted = { activeTabIndex = if (it) 1 else 0 },
-                    textHeight = if (isFormatted) formattedHeight else transcriptionHeight,
-                    onExpand = currentEntry?.let { id -> { openReader(id, isFormatted) } },
-                    onFormat = viewModel::formatText,
+                    editedText = selectedResult?.formattedText.orEmpty(),
+                    selectedEdited = isEdited,
+                    onSelectFormatted = { selectedTab = it },
+                    textHeight = if (isEdited) formattedHeight else transcriptionHeight,
+                    onExpand = currentEntry?.let { id ->
+                        { openReader(id, isEdited, selectedPromptId.takeIf { isEdited }) }
+                    },
+                    onFormat = {
+                        viewModel.formatText(selectedPromptId).also { started ->
+                            if (started && !isEdited) selectedTab = null
+                        }
+                    },
                     isBusy = screenState.isBusy,
                     isFormatting = formattingCurrent
                 )
@@ -224,11 +239,11 @@ internal fun MainScreen(
                         .fillMaxWidth()
                         .height(10.dp)
                         .padding(vertical = 4.dp)
-                        .pointerInput(activeTabIndex) {
+                        .pointerInput(isEdited) {
                             detectDragGestures { change, dragAmount ->
                                 change.consume()
                                 val deltaDp = with(density) { dragAmount.y.toDp() }
-                                if (activeTabIndex == 0) {
+                                if (!isEdited) {
                                     transcriptionHeight = (transcriptionHeight + deltaDp).coerceIn(80.dp, 800.dp)
                                 } else {
                                     formattedHeight = (formattedHeight + deltaDp).coerceIn(80.dp, 800.dp)
@@ -299,7 +314,7 @@ internal fun MainScreen(
                         if (!formattingCurrent) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Formatting a history entry…")
+                            Text("Editing…")
                         }
                     }
                     is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Error -> {

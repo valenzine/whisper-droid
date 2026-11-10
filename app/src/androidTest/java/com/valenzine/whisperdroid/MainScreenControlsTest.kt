@@ -24,7 +24,7 @@ class MainScreenControlsTest {
     @Test
     fun promptPillsStayOnMainScreen() {
         composeRule.onNodeWithText("Tidy up").assertIsDisplayed()
-        composeRule.onNodeWithText("Automatically format new transcriptions").assertDoesNotExist()
+        composeRule.onNodeWithText("Edit new transcripts automatically").assertDoesNotExist()
     }
 
     @Test
@@ -48,8 +48,8 @@ class MainScreenControlsTest {
     fun settingsOpensPromptManagement() {
         composeRule.onNodeWithContentDescription("Settings").performClick()
 
-        composeRule.onNodeWithText("Processing prompts").assertIsDisplayed()
-        composeRule.onNodeWithText("Automatically format new transcriptions").assertIsDisplayed()
+        composeRule.onNodeWithText("Editing prompts").assertIsDisplayed()
+        composeRule.onNodeWithText("Edit new transcripts automatically").assertIsDisplayed()
         composeRule.onNodeWithText("Save prompt").assertIsDisplayed()
     }
 }

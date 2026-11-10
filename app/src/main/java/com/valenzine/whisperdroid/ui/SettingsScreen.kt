@@ -162,7 +162,7 @@ fun SettingsScreen() {
                     value = ModelCatalog.llmModels.firstOrNull { it.id == tempLlmModel }?.label ?: tempLlmModel,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Processing model") },
+                    label = { Text("Editing model") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isLlmModelDropdownExpanded) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -235,7 +235,7 @@ private fun PromptManagementCard(
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Processing prompts", style = MaterialTheme.typography.titleMedium)
+                    Text("Editing prompts", style = MaterialTheme.typography.titleMedium)
                     Text("Choose one on the main screen. Edit prompt text here.", style = MaterialTheme.typography.bodyMedium)
                 }
                 TextButton(onClick = {
@@ -257,7 +257,7 @@ private fun PromptManagementCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    "Automatically format new transcriptions",
+                    "Edit new transcripts automatically",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium
                 )
