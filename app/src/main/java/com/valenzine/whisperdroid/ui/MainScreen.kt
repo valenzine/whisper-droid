@@ -18,10 +18,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import android.net.Uri
+import com.valenzine.whisperdroid.R
 import com.valenzine.whisperdroid.WhisperDroidApplication
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModelFactory
@@ -120,46 +122,61 @@ internal fun MainScreen(
                 }
             }
 
-            // Language selection dropdown
-            ExposedDropdownMenuBox(
-                expanded = languageDropdownExpanded,
-                onExpandedChange = { languageDropdownExpanded = !languageDropdownExpanded }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                TextField(
-                    value = selectedLanguage,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Language") },
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(
-                            expanded = languageDropdownExpanded
-                        )
-                    },
-                    modifier = Modifier
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                        .fillMaxWidth()
-                )
-                ExposedDropdownMenu(
+                ExposedDropdownMenuBox(
                     expanded = languageDropdownExpanded,
-                    onDismissRequest = { languageDropdownExpanded = false }
+                    onExpandedChange = { languageDropdownExpanded = it },
+                    modifier = Modifier.weight(1f)
                 ) {
-                    languageOptions.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option) },
-                            onClick = {
-                                selectedLanguage = option
-                                audioSession.shareLanguage = languageCodes[option]
-                                languageDropdownExpanded = false
-                            }
-                        )
+                    OutlinedTextField(
+                        value = selectedLanguage,
+                        onValueChange = {},
+                        readOnly = true,
+                        singleLine = true,
+                        label = { Text("Language") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(
+                                expanded = languageDropdownExpanded
+                            )
+                        },
+                        modifier = Modifier
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = languageDropdownExpanded,
+                        onDismissRequest = { languageDropdownExpanded = false }
+                    ) {
+                        languageOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = {
+                                    selectedLanguage = option
+                                    audioSession.shareLanguage = languageCodes[option]
+                                    languageDropdownExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(onClick = { launcher.launch("audio/*") }) {
-                Text("Select Audio File")
+                val audioPickerLabel = "Select audio file"
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                    tooltip = { PlainTooltip { Text(audioPickerLabel) } },
+                    state = rememberTooltipState()
+                ) {
+                    FilledIconButton(
+                        onClick = { launcher.launch("audio/*") },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(painterResource(R.drawable.ic_audio_file), contentDescription = audioPickerLabel)
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
