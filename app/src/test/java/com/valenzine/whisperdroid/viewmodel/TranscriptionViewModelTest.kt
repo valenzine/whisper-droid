@@ -5,6 +5,7 @@ import com.valenzine.whisperdroid.repository.SettingsGateway
 import com.valenzine.whisperdroid.repository.TranscriptionGateway
 import com.valenzine.whisperdroid.repository.StagedAudio
 import com.valenzine.whisperdroid.repository.FormattedTranscript
+import com.valenzine.whisperdroid.repository.SavedPrompt
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -137,9 +138,12 @@ class TranscriptionViewModelTest {
         autoProcess: Boolean = false,
         apiKey: String = "test-key"
     ) : SettingsGateway {
+        private val promptId = "test-prompt"
         private val state = MutableStateFlow(AppSettings(
             apiKey = apiKey,
             llmPrompt = "Initial prompt",
+            prompts = listOf(SavedPrompt(promptId, "Test prompt", "Initial prompt")),
+            activePromptId = promptId,
             transcriptionModel = "gpt-transcribe",
             llmModel = "gpt-5.6-luna",
             autoProcess = autoProcess
@@ -151,7 +155,12 @@ class TranscriptionViewModelTest {
         }
 
         fun update(prompt: String, llmModel: String) {
-            state.value = state.value.copy(llmPrompt = prompt, llmModel = llmModel)
+            state.value = state.value.copy(
+                llmPrompt = prompt,
+                prompts = listOf(SavedPrompt(promptId, "Test prompt", prompt)),
+                activePromptId = promptId,
+                llmModel = llmModel
+            )
         }
     }
 

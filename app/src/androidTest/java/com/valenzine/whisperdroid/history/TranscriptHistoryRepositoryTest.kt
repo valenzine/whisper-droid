@@ -63,4 +63,24 @@ class TranscriptHistoryRepositoryTest {
         assertNull(repository.find("fingerprint"))
         assertEquals(emptyList<TranscriptEntry>(), repository.entries.first())
     }
+
+    @Test
+    fun promptResultsReplacePerPromptProjectLatestAndCascadeWithTheirEntry() = runBlocking {
+        val saved = repository.saveRaw("fingerprint", "dictation.m4a", "raw transcript", "Audio", 1L)
+
+        repository.savePromptResult(saved.id, "tidy", "Tidy", "first tidy", "First")
+        repository.savePromptResult(saved.id, "brief", "Brief", "brief result", "Brief")
+        repository.savePromptResult(saved.id, "tidy", "Tidy", "replacement tidy", "Replacement")
+
+        val results = repository.results(saved.id).first()
+        assertEquals(2, results.size)
+        assertEquals("replacement tidy", results.first { it.promptId == "tidy" }.formattedText)
+
+        repository.deletePromptResult(saved.id, "brief")
+        assertEquals(1, repository.results(saved.id).first().size)
+        assertEquals("replacement tidy", repository.entries.first().single().formattedText)
+
+        repository.delete(saved.id)
+        assertEquals(emptyList<TranscriptPromptResult>(), repository.results(saved.id).first())
+    }
 }
