@@ -3,11 +3,16 @@ package com.valenzine.whisperdroid.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
@@ -22,6 +27,7 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.OffsetMapping
 import com.valenzine.whisperdroid.model.ModelCatalog
 import com.valenzine.whisperdroid.repository.AppSettings
+import com.valenzine.whisperdroid.repository.DEFAULT_PROMPT_ID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,7 +39,6 @@ fun SettingsScreen() {
     val settings by viewModel.settings.collectAsState()
 
     var tempApiKey by remember { mutableStateOf("") }
-    var tempLlmPrompt by remember { mutableStateOf("") }
     var tempTranscriptionModel by remember { mutableStateOf(ModelCatalog.DEFAULT_TRANSCRIPTION_MODEL) }
     var tempLlmModel by remember { mutableStateOf(ModelCatalog.DEFAULT_LLM_MODEL) }
     var isModelDropdownExpanded by remember { mutableStateOf(false) }
@@ -46,9 +51,6 @@ fun SettingsScreen() {
     // Keep temp values in sync with ViewModel when they change
     LaunchedEffect(settings.apiKey) {
         tempApiKey = settings.apiKey
-    }
-    LaunchedEffect(settings.llmPrompt) {
-        tempLlmPrompt = settings.llmPrompt
     }
     LaunchedEffect(settings.transcriptionModel) {
         tempTranscriptionModel = settings.transcriptionModel
@@ -158,7 +160,7 @@ fun SettingsScreen() {
                     value = ModelCatalog.llmModels.firstOrNull { it.id == tempLlmModel }?.label ?: tempLlmModel,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Processing model") },
+                    label = { Text("Editing model") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isLlmModelDropdownExpanded) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -182,27 +184,16 @@ fun SettingsScreen() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            TextField(
-                value = tempLlmPrompt,
-                onValueChange = { tempLlmPrompt = it },
-                label = { Text("LLM Instruction (transcribed text will be added automatically)") },
-                placeholder = { Text("Format the following text with paragraphs:") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 120.dp, max = 200.dp),
-                maxLines = 5
-            )
+            PromptManagementCard(settings, viewModel)
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(onClick = {
                 viewModel.save(
-                    AppSettings(
+                    settings.copy(
                         apiKey = tempApiKey,
-                        llmPrompt = tempLlmPrompt,
                         transcriptionModel = tempTranscriptionModel,
-                        llmModel = tempLlmModel,
-                        autoProcess = settings.autoProcess
+                        llmModel = tempLlmModel
                     )
                 )
                 showSnackbar = true
@@ -214,6 +205,117 @@ fun SettingsScreen() {
                 LaunchedEffect(snackbarHostState) {
                     snackbarHostState.showSnackbar("Settings saved!")
                     showSnackbar = false
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PromptManagementCard(
+    settings: AppSettings,
+    viewModel: SettingsViewModel
+) {
+    var editorId by rememberSaveable { mutableStateOf<String?>(settings.activePromptId) }
+    var nameDraft by rememberSaveable(editorId) { mutableStateOf<String?>(null) }
+    var contentDraft by rememberSaveable(editorId) { mutableStateOf<String?>(null) }
+    val selectedPrompt = settings.prompts.firstOrNull { it.id == editorId }
+    val promptName = nameDraft ?: selectedPrompt?.name.orEmpty()
+    val promptContent = contentDraft ?: selectedPrompt?.content.orEmpty()
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Editing prompts", style = MaterialTheme.typography.titleMedium)
+                    Text("Choose one on the main screen. Edit prompt text here.", style = MaterialTheme.typography.bodyMedium)
+                }
+                TextButton(onClick = {
+                    editorId = null
+                    nameDraft = null
+                    contentDraft = null
+                }) { Text("New") }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .toggleable(
+                        value = settings.autoProcess,
+                        role = Role.Switch,
+                        onValueChange = { viewModel.setAutoProcess(it) }
+                    )
+                    .heightIn(min = 48.dp)
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Edit new transcripts automatically",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Switch(checked = settings.autoProcess, onCheckedChange = null)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                settings.prompts.forEach { prompt ->
+                    FilterChip(
+                        selected = prompt.id == editorId,
+                        onClick = { editorId = prompt.id },
+                        label = {
+                            Text(
+                                prompt.name,
+                                modifier = Modifier.widthIn(max = 180.dp),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        },
+                        shape = CircleShape,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = promptName,
+                onValueChange = { nameDraft = it },
+                label = { Text("Prompt name") },
+                enabled = selectedPrompt?.isBuiltIn != true,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = promptContent,
+                onValueChange = { contentDraft = it },
+                label = { Text("Processing instruction") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 4
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = {
+                        if (selectedPrompt == null) {
+                            viewModel.createPrompt(promptName, promptContent) { editorId = it }
+                        } else {
+                            viewModel.updatePrompt(selectedPrompt.copy(name = promptName, content = promptContent))
+                            nameDraft = null
+                            contentDraft = null
+                        }
+                    },
+                    enabled = promptName.isNotBlank() &&
+                        (selectedPrompt != null || editorId == null && promptContent.isNotBlank())
+                ) { Text("Save prompt") }
+                Spacer(modifier = Modifier.width(8.dp))
+                if (selectedPrompt?.isBuiltIn == true) {
+                    TextButton(onClick = {
+                        viewModel.resetDefaultPrompt()
+                        contentDraft = null
+                    }) { Text("Reset default") }
+                } else if (selectedPrompt != null) {
+                    TextButton(onClick = {
+                        viewModel.deletePrompt(selectedPrompt.id)
+                        editorId = DEFAULT_PROMPT_ID
+                    }) { Text("Delete") }
                 }
             }
         }

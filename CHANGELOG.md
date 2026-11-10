@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0] - 2026-11-10
+
+### Added
+- On-device transcript history with source, local import time, and a brief summary. Delete individual entries or clear all history.
+- Exact-audio detection that opens a saved transcript without a second API request.
+- Saved editing prompts, with migration of existing custom prompts. History keeps the latest successful edit per prompt and lets you view, rerun, or delete each result.
+- A selectable full-screen reader with Markdown, Copy, and Back.
+
+### Changed
+- Use compact Transcript and Edited tabs, inline Markdown, prompt pills, and a wider resize handle. Automatic editing is in Settings.
+- Selecting a prompt shows its saved edit when available. History can rerun a prompt using the saved transcript, and Re-transcribe is available when the app can still reopen the original file.
+
+### Fixed
+- Shared audio opens in Whisper Droid’s own task. Processing can continue when you return to the sending app, and saved transcripts are available after relaunch.
+- Show a recoverable warning when the device is offline.
+- Preserve unsaved prompt drafts when Android recreates the screen.
+
 ## [0.2.1] - 2026-11-10
 
 ### Added

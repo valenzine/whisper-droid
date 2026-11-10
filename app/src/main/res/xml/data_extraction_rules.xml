@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Add <include> and <exclude> rules here to configure cloud backup.
-             For more information, see https://developer.android.com/guide/topics/data/autobackup -->
+        <!-- The shared-preference allowlist excludes Room's transcript-history database. -->
         <include domain="sharedpref" path="."/>
     </cloud-backup>
     <device-transfer>
