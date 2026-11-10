@@ -424,11 +424,6 @@ internal fun MainScreen(
                             viewModel.resetState()
                         }
                     }
-                    is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Success -> {
-                        LaunchedEffect(snackbarHostState, currentState.transcription) {
-                            snackbarHostState.showSnackbar("Transcription complete!")
-                        }
-                    }
                     else -> {
                         // idle - keep this area minimal to avoid layout jumps
                         Text("")
