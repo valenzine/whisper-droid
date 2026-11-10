@@ -226,8 +226,6 @@ private fun PromptManagementCard(settings: AppSettings, viewModel: SettingsViewM
         if (prompt != null) {
             nameDraft = prompt.name
             contentDraft = prompt.content
-        } else if (editorId != null) {
-            editorId = DEFAULT_PROMPT_ID
         }
     }
 
@@ -293,7 +291,7 @@ private fun PromptManagementCard(settings: AppSettings, viewModel: SettingsViewM
                             )
                         )
                     },
-                    enabled = nameDraft.isNotBlank()
+                    enabled = nameDraft.isNotBlank() && (editorId == null || selectedPrompt != null)
                 ) { Text("Save prompt") }
                 Spacer(modifier = Modifier.width(8.dp))
                 if (selectedPrompt?.isBuiltIn == true) {

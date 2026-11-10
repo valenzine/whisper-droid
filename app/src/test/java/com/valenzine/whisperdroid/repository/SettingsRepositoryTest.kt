@@ -122,7 +122,7 @@ class SettingsRepositoryTest {
         repository.createPrompt("Second", "Second content")
         val second = repository.settingsFlow.first().activePrompt
 
-        repository.updatePromptContent(first.id, "Updated first content")
+        repository.updatePrompt(first.copy(content = "Updated first content"))
 
         val settings = repository.settingsFlow.first()
         assertEquals(second.id, settings.activePromptId)

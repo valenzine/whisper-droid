@@ -23,10 +23,6 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         onCreated(repository.createPrompt(name, content))
     }
     fun updatePrompt(prompt: SavedPrompt) = viewModelScope.launch { repository.updatePrompt(prompt) }
-    fun updatePromptContent(id: String, content: String) = viewModelScope.launch {
-        repository.updatePromptContent(id, content)
-    }
-    fun deletePrompt(id: String) = viewModelScope.launch { repository.deletePrompt(id) }
     fun resetDefaultPrompt() = viewModelScope.launch { repository.resetDefaultPrompt() }
     fun setAutoProcess(enabled: Boolean) = viewModelScope.launch { repository.saveAutoProcess(enabled) }
 }

@@ -180,18 +180,6 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Settin
         storePrompts(preferences, updated, activeId)
     }
 
-    suspend fun updatePromptContent(id: String, content: String) = dataStore.edit { preferences ->
-        val prompts = decodePrompts(preferences[savedPromptsKey])
-        val updated = prompts.map { prompt ->
-            if (prompt.id == id) {
-                prompt.copy(content = content.ifBlank { DEFAULT_LLM_PROMPT })
-            } else prompt
-        }
-        val activeId = preferences[activePromptIdKey]?.takeIf { active -> updated.any { it.id == active } }
-            ?: updated.first().id
-        storePrompts(preferences, updated, activeId)
-    }
-
     suspend fun resetDefaultPrompt() = dataStore.edit { preferences ->
         val prompts = decodePrompts(preferences[savedPromptsKey]).map { prompt ->
             if (prompt.id == DEFAULT_PROMPT_ID) prompt.copy(content = DEFAULT_LLM_PROMPT) else prompt
