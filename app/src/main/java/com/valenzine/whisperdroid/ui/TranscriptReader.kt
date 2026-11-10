@@ -1,5 +1,6 @@
 package com.valenzine.whisperdroid.ui
 
+import android.graphics.Typeface
 import android.text.style.UnderlineSpan
 import android.util.TypedValue
 import android.widget.TextView
@@ -26,17 +27,19 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.widget.TextViewCompat
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
 import io.noties.markwon.MarkwonSpansFactory
 import io.noties.markwon.core.CorePlugin
 import io.noties.markwon.core.MarkwonTheme
 import org.commonmark.node.Link
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,24 +60,24 @@ internal fun TranscriptReader(
                 Modifier.fillMaxSize().padding(insets).testTag("transcript-reader-scroll")
                     .verticalScroll(rememberScrollState()).padding(16.dp)
             ) {
-                MarkdownTranscriptText(text)
+                TranscriptBodyText(text, renderMarkdown = true)
             }
         }
     }
 }
 
 @Composable
-internal fun MarkdownTranscriptText(
+internal fun TranscriptBodyText(
     text: String,
-    modifier: Modifier = Modifier,
-    fontSize: TextUnit = 18.sp
+    renderMarkdown: Boolean,
+    bodyStyle: TextStyle? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val markerColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     val dividerColor = MaterialTheme.colorScheme.outlineVariant.toArgb()
     val lineSpacing = with(density) { 3.dp.toPx() }
-    val markwon = remember(context, density, markerColor, dividerColor) {
+    val markwon = if (renderMarkdown) remember(context, density, markerColor, dividerColor) {
         Markwon.builderNoCore(context)
             .usePlugin(CorePlugin.create().hasExplicitMovementMethod(true))
             .usePlugin(object : AbstractMarkwonPlugin() {
@@ -96,9 +99,9 @@ internal fun MarkdownTranscriptText(
                 }
             })
             .build()
-    }
+    } else null
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-    val textSizePx = with(density) { fontSize.toPx() }
+    val textSizePx = with(density) { (bodyStyle?.fontSize ?: 18.sp).toPx() }
     AndroidView(
         factory = { context ->
             TextView(context).apply {
@@ -108,14 +111,22 @@ internal fun MarkdownTranscriptText(
         update = { view ->
             if (view.textSize != textSizePx) view.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
             view.setTextColor(textColor)
-            view.setLineSpacing(lineSpacing, 1f)
+            if (bodyStyle == null) {
+                view.setLineSpacing(lineSpacing, 1f)
+            } else {
+                view.typeface = Typeface.DEFAULT
+                view.includeFontPadding = false
+                view.letterSpacing = with(density) { bodyStyle.letterSpacing.toPx() } / textSizePx
+                val lineHeightPx = with(density) { bodyStyle.lineHeight.toPx().roundToInt() }
+                TextViewCompat.setLineHeight(view, lineHeightPx)
+            }
             val render = Triple(markwon, text, textSizePx)
             if (view.tag != render) {
-                markwon.setMarkdown(view, text)
+                if (markwon == null) view.text = text else markwon.setMarkdown(view, text)
                 view.tag = render
             }
         },
-        modifier = modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
     )
 }
 

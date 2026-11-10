@@ -128,7 +128,7 @@ internal fun HistoryPromptResultsScreen(
                             Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                                 .padding(vertical = 16.dp)
                         ) {
-                            MarkdownTranscriptText(result.formattedText)
+                            TranscriptBodyText(result.formattedText, renderMarkdown = true)
                         }
                     }
                 }

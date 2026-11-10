@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -84,12 +83,11 @@ internal fun TranscriptPane(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    val bodyStyle = MaterialTheme.typography.bodyLarge
-                    if (selectedEdited) {
-                        MarkdownTranscriptText(text, fontSize = bodyStyle.fontSize)
-                    } else {
-                        SelectionContainer { Text(text, style = bodyStyle) }
-                    }
+                    TranscriptBodyText(
+                        text,
+                        renderMarkdown = selectedEdited,
+                        bodyStyle = MaterialTheme.typography.bodyLarge
+                    )
                 }
             }
             if (hasTranscript && (isFormatting || !hasEdited || selectedEdited)) {

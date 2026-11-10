@@ -35,7 +35,7 @@ class HomePromptSwitchingTest {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as WhisperDroidApplication
         val originalPromptId = runBlocking { app.settings.settingsFlow.first().activePromptId }
         val entry = runBlocking {
-            app.history.saveRaw(UUID.randomUUID().toString(), "test.wav", "Saved transcript.", "Test", System.currentTimeMillis())
+            app.history.saveRaw(UUID.randomUUID().toString(), "test.wav", "# Saved transcript.", "Test", System.currentTimeMillis())
         }
         val gist = runBlocking { app.settings.createPrompt("Test gist", "Summarize this.") }
         val unused = runBlocking { app.settings.createPrompt("Test unused", "Rephrase this.") }
@@ -50,7 +50,7 @@ class HomePromptSwitchingTest {
             composeRule.runOnIdle { app.transcription.showHistoryEntry(updated) }
 
             composeRule.onNodeWithText("Transcript").performClick()
-            composeRule.onNodeWithText("Saved transcript.").assertIsDisplayed()
+            onView(withText("# Saved transcript.")).check(matches(isDisplayed()))
             composeRule.onNodeWithText("Tidy up").performClick()
             val transcriptBodySize = with(composeRule.density) { Typography.bodyLarge.fontSize.toPx() }
             onView(withText("Cleaned text")).check { view, error ->

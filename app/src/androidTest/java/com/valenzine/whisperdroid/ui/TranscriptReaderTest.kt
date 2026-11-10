@@ -3,10 +3,14 @@ package com.valenzine.whisperdroid.ui
 import android.text.Spanned
 import android.text.style.ClickableSpan
 import android.widget.TextView
+import androidx.activity.ComponentActivity
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -30,7 +34,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class TranscriptReaderTest {
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun rendersRawTranscription() {
@@ -145,4 +149,53 @@ class TranscriptReaderTest {
         composeRule.runOnIdle { assertTrue(expanded) }
     }
 
+    @Test
+    fun matchesRawAndEditedTypographyForTheSameWrappedParagraph() {
+        val paragraph = "A plain paragraph with enough repeated words to wrap across several lines on a phone. "
+            .repeat(5).trimEnd()
+        var edited by mutableStateOf(false)
+        composeRule.setContent {
+            MaterialTheme {
+                TranscriptPane(
+                    rawText = paragraph,
+                    editedText = paragraph,
+                    selectedEdited = edited,
+                    onSelectFormatted = { edited = it },
+                    textHeight = 220.dp,
+                    onExpand = null,
+                    onFormat = { true },
+                    isBusy = false
+                )
+            }
+        }
+
+        fun measureBody(): BodyLayout {
+            lateinit var metrics: BodyLayout
+            onView(withText(paragraph)).check { view, error ->
+                if (error != null) throw error
+                val textView = view as TextView
+                val layout = textView.layout
+                assertTrue(textView.isTextSelectable)
+                metrics = BodyLayout(
+                    textView.textSize,
+                    textView.letterSpacing,
+                    List(layout.lineCount) { layout.getLineStart(it) },
+                    List(layout.lineCount) { layout.getLineBaseline(it) }
+                )
+            }
+            return metrics
+        }
+
+        val transcript = measureBody()
+        assertTrue(transcript.lineStarts.size > 1)
+        composeRule.onNodeWithText("Edited").performClick()
+        assertEquals(transcript, measureBody())
+    }
+
+    private data class BodyLayout(
+        val textSize: Float,
+        val letterSpacing: Float,
+        val lineStarts: List<Int>,
+        val lineBaselines: List<Int>
+    )
 }
