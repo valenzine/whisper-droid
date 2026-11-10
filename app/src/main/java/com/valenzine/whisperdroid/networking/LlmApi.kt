@@ -1,5 +1,6 @@
 package com.valenzine.whisperdroid.networking
 
+import com.google.gson.annotations.SerializedName
 import retrofit2.http.Body
 import retrofit2.http.Header
 import retrofit2.http.POST
@@ -14,7 +15,8 @@ interface LlmApi {
 
 data class LlmRequest(
     val model: String,
-    val messages: List<Message>
+    val messages: List<Message>,
+    @SerializedName("reasoning_effort") val reasoningEffort: String? = null
 )
 
 data class Message(

@@ -62,7 +62,7 @@ history.
 
 - Model compatibility: `gpt-transcribe`, `gpt-4o-mini-transcribe`, and `gpt-4o-transcribe` require supported containers. The app attempts to remux Opus/OGG into WebM when necessary. If conversion fails, use `whisper-1` or pre-convert the audio to MP3/WAV. Realtime transcription, snapshots, diarization, and speaker-segment UI are not part of version 0.2.0.
 - API key handling: Settings now use a single unified API key field (stored in DataStore). The UI applies partial masking to reduce accidental exposure of the full key.
-- Formatting backend: choose the recommended cost-effective `gpt-5.6-luna` or cheapest `gpt-5-nano` model in Settings. The prompt and selected model are persisted together with the API key and transcription model.
+- Formatting backend: formatting defaults to `gpt-5.6-luna`, with `gpt-6-luna` available as an opt-in model in Settings. The prompt and selected model are persisted together with the API key and transcription model.
 - File size limits: the app rejects files over 25 MB while copying them locally, before upload. It also surfaces helpful errors for invalid API keys, rate limits, unsupported formats, and server failures.
 
 ## Tech stack
