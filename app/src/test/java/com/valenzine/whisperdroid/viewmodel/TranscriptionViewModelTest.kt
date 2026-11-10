@@ -90,6 +90,22 @@ class TranscriptionViewModelTest {
     }
 
     @Test
+    fun manualEditUsesTheTappedPromptEvenWhenThePersistedSelectionDiffers() = runTest {
+        val gateway = RecordingGateway(CompletableDeferred("raw dictation"))
+        val settings = FakeSettings()
+        settings.addPrompt(SavedPrompt("gist", "Gist", "Write a short gist."))
+        val viewModel = TranscriptionViewModel(gateway, settings)
+        viewModel.processStagedAudio(audio)
+
+        assertTrue(viewModel.formatText(promptId = "gist"))
+        advanceUntilIdle()
+
+        assertEquals("Write a short gist.", gateway.lastPrompt)
+        assertEquals("test-prompt", settings.settingsFlow.value.activePromptId)
+        assertEquals(1, gateway.formatCalls)
+    }
+
+    @Test
     fun formattingIsRejectedWhenTranscriptIsEmpty() = runTest {
         val gateway = RecordingGateway()
         val viewModel = TranscriptionViewModel(gateway, FakeSettings())
@@ -149,6 +165,10 @@ class TranscriptionViewModelTest {
             autoProcess = autoProcess
         ))
         override val settingsFlow: StateFlow<AppSettings> = state
+
+        fun addPrompt(prompt: SavedPrompt) {
+            state.value = state.value.copy(prompts = state.value.prompts + prompt)
+        }
 
         fun setApiKey(apiKey: String) {
             state.value = state.value.copy(apiKey = apiKey)

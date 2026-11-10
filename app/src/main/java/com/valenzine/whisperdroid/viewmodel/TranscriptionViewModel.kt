@@ -26,6 +26,7 @@ data class TranscriptionScreenState(
     val selectedFileName: String? = null,
     val historyEntryId: Long? = null,
     val formattingEntryId: Long? = null,
+    val formattingPromptId: String? = null,
     val phase: TranscriptionUiState = TranscriptionUiState.Idle,
     val error: String? = null,
     val errorDetails: String? = null
@@ -184,13 +185,19 @@ class TranscriptionViewModel(
         }
     }
 
-    fun formatText(): Boolean {
+    fun formatText(promptId: String? = null): Boolean {
         val current = _screenState.value
         if (current.transcription.isBlank() || !operation.tryLock()) return false
-        setPhase(TranscriptionUiState.FormattingText)
+        _screenState.value = current.copy(
+            phase = TranscriptionUiState.FormattingText,
+            formattingEntryId = current.historyEntryId,
+            formattingPromptId = promptId,
+            error = null,
+            errorDetails = null
+        )
         viewModelScope.launch {
             try {
-                formatTextInternal(current.transcription, current.historyEntryId)
+                formatTextInternal(current.transcription, current.historyEntryId, promptId)
             } finally {
                 operation.unlock()
             }
@@ -203,6 +210,7 @@ class TranscriptionViewModel(
         val previousState = _screenState.value
         _screenState.value = previousState.copy(
             formattingEntryId = entryId,
+            formattingPromptId = promptId,
             phase = TranscriptionUiState.FormattingText,
             error = null,
             errorDetails = null
@@ -227,10 +235,11 @@ class TranscriptionViewModel(
                     _screenState.value = _screenState.value.copy(
                         formattedText = result.text,
                         formattingEntryId = null,
+                        formattingPromptId = null,
                         phase = TranscriptionUiState.Success(_screenState.value.transcription, result.text)
                     )
                 } else {
-                    _screenState.value = previousState.copy(formattingEntryId = null)
+                    _screenState.value = previousState.copy(formattingEntryId = null, formattingPromptId = null)
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -243,19 +252,24 @@ class TranscriptionViewModel(
         return true
     }
 
-    private suspend fun formatTextInternal(source: String, entryId: Long?) {
+    private suspend fun formatTextInternal(source: String, entryId: Long?, promptId: String? = null) {
         try {
             val settings = settingsRepository.settingsFlow.first()
             if (settings.apiKey.isBlank()) {
                 setError("Add an OpenAI API key in Settings before formatting.")
                 return
             }
-            val prompt = settings.activePrompt
-            _screenState.value = _screenState.value.copy(formattingEntryId = entryId)
+            val prompt = if (promptId == null) settings.activePrompt else settings.prompts.firstOrNull { it.id == promptId }
+            if (prompt == null) {
+                setError("This prompt is no longer available.")
+                return
+            }
+            _screenState.value = _screenState.value.copy(formattingEntryId = entryId, formattingPromptId = prompt.id)
             val result = formatAndSave(source, entryId, settings, prompt)
             _screenState.value = _screenState.value.copy(
                 formattedText = result.text,
                 formattingEntryId = null,
+                formattingPromptId = null,
                 phase = TranscriptionUiState.Success(source, result.text),
                 error = null,
                 errorDetails = null
@@ -281,7 +295,13 @@ class TranscriptionViewModel(
     }
 
     private fun setPhase(phase: TranscriptionUiState) {
-        _screenState.value = _screenState.value.copy(phase = phase, formattingEntryId = null, error = null, errorDetails = null)
+        _screenState.value = _screenState.value.copy(
+            phase = phase,
+            formattingEntryId = null,
+            formattingPromptId = null,
+            error = null,
+            errorDetails = null
+        )
     }
 
     private fun setError(message: String, details: String? = null) {
