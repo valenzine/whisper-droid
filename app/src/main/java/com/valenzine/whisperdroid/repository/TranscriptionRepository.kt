@@ -231,7 +231,9 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         model: String,
         language: String?,
         onProgress: ((String) -> Unit)?
-    ): String = transcribeFile(stagedAudio.file, apiKey, model, language, onProgress)
+    ): String = withContext(Dispatchers.IO) {
+        transcribeFile(stagedAudio.file, apiKey, model, language, onProgress)
+    }
 
     private suspend fun copyUriToCache(uri: Uri): StagedAudio = withContext(Dispatchers.IO) {
         val metadata = context.contentResolver.query(
