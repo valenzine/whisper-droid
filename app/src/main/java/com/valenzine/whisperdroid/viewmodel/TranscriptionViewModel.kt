@@ -16,6 +16,11 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.net.NoRouteToHostException
+import java.net.SocketException
+import java.net.UnknownHostException
+
+private const val OFFLINE_MESSAGE = "No internet connection. Turn off Airplane mode or connect to Wi-Fi or mobile data, then try again."
 
 data class TranscriptionScreenState(
     val transcription: String = "",
@@ -203,7 +208,8 @@ class TranscriptionViewModel(
         } catch (error: CancellationException) {
             throw error
         } catch (e: Exception) {
-            setError(e.message ?: "Formatting failed", e.message)
+            val message = if (e.hasNoNetworkRoute()) OFFLINE_MESSAGE else e.message ?: "Formatting failed"
+            setError(message, e.message)
         }
     }
 
@@ -219,11 +225,19 @@ class TranscriptionViewModel(
         )
     }
 
-    private fun messageFor(error: Exception, fallback: String): String = when {
+    private fun messageFor(error: Throwable, fallback: String): String = when {
+        error.hasNoNetworkRoute() -> OFFLINE_MESSAGE
         error.message?.contains("401") == true -> "Invalid API key"
         error.message?.contains("413") == true || error.message?.contains("too large", true) == true -> "File too large (max 25 MB)"
         error.message?.contains("429") == true -> "Rate limit exceeded, please try again later"
         error.message?.contains("network", true) == true -> "Network error, check your connection"
         else -> error.message ?: fallback
     }
+
+    private fun Throwable.hasNoNetworkRoute(): Boolean = generateSequence(this) { it.cause }
+        .any { cause ->
+            cause is UnknownHostException ||
+                cause is NoRouteToHostException ||
+                cause is SocketException && cause.message.orEmpty().contains("network is unreachable", ignoreCase = true)
+        }
 }
