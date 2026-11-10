@@ -3,7 +3,7 @@ package com.valenzine.whisperdroid.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -15,11 +15,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -52,6 +57,12 @@ internal fun MainScreen(
     val screenScope = rememberCoroutineScope()
     LaunchedEffect(viewModel) {
         viewModel.audioErrorMessages.collect { snackbarHostState.showSnackbar(it) }
+    }
+    if (uiState is TranscriptionUiState.Error) {
+        LaunchedEffect(uiState) {
+            snackbarHostState.showSnackbar(uiState.message, actionLabel = "Dismiss")
+            viewModel.resetState()
+        }
     }
 
     val languageOptions = listOf("Automatic", "English", "Spanish", "Italian")
@@ -100,247 +111,222 @@ internal fun MainScreen(
         (screenState.formattingEntryId == null || screenState.formattingEntryId == currentEntry) &&
         (screenState.formattingPromptId == null || screenState.formattingPromptId == selectedPromptId)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeDrawingPadding()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Main content area becomes scrollable and takes remaining space.
-        Column(modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())) {
+    val textHeight = if (isEdited) formattedHeight else transcriptionHeight
+    fun resizeTo(height: Dp) {
+        val clamped = height.coerceIn(80.dp, 800.dp)
+        if (isEdited) formattedHeight = clamped else transcriptionHeight = clamped
+    }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets.safeDrawing
+    ) { insets ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(insets).padding(horizontal = 16.dp).padding(top = 16.dp)
+        ) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth()
+                    .verticalScroll(rememberScrollState()).padding(bottom = 8.dp)
             ) {
-                Text(
-                    "Whisper Droid",
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleLarge
-                )
-                TextButton(onClick = { navController.navigate("history") }) { Text("History") }
-                IconButton(onClick = {
-                    navController.navigate("settings")
-                }) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings")
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ExposedDropdownMenuBox(
-                    expanded = languageDropdownExpanded,
-                    onExpandedChange = { languageDropdownExpanded = it },
-                    modifier = Modifier.weight(1f)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = selectedLanguage,
-                        onValueChange = {},
-                        readOnly = true,
-                        singleLine = true,
-                        label = { Text("Language") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(
-                                expanded = languageDropdownExpanded
-                            )
-                        },
-                        modifier = Modifier
-                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                            .fillMaxWidth()
+                    Text(
+                        "Whisper Droid",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleLarge
                     )
-                    ExposedDropdownMenu(
+                    TextButton(onClick = { navController.navigate("history") }) { Text("History") }
+                    IconButton(onClick = {
+                        navController.navigate("settings")
+                    }) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ExposedDropdownMenuBox(
                         expanded = languageDropdownExpanded,
-                        onDismissRequest = { languageDropdownExpanded = false }
+                        onExpandedChange = { languageDropdownExpanded = it },
+                        modifier = Modifier.weight(1f)
                     ) {
-                        languageOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option) },
-                                onClick = {
-                                    selectedLanguage = option
-                                    audioSession.shareLanguage = languageCodes[option]
-                                    languageDropdownExpanded = false
-                                }
-                            )
+                        OutlinedTextField(
+                            value = selectedLanguage,
+                            onValueChange = {},
+                            readOnly = true,
+                            singleLine = true,
+                            label = { Text("Language") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = languageDropdownExpanded
+                                )
+                            },
+                            modifier = Modifier
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = languageDropdownExpanded,
+                            onDismissRequest = { languageDropdownExpanded = false }
+                        ) {
+                            languageOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = {
+                                        selectedLanguage = option
+                                        audioSession.shareLanguage = languageCodes[option]
+                                        languageDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    val audioPickerLabel = "Select audio file"
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                        tooltip = { PlainTooltip { Text(audioPickerLabel) } },
+                        state = rememberTooltipState()
+                    ) {
+                        FilledIconButton(
+                            onClick = { launcher.launch("audio/*") },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(painterResource(R.drawable.ic_audio_file), contentDescription = audioPickerLabel)
                         }
                     }
                 }
 
-                val audioPickerLabel = "Select audio file"
-                TooltipBox(
-                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-                    tooltip = { PlainTooltip { Text(audioPickerLabel) } },
-                    state = rememberTooltipState()
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilledIconButton(
-                        onClick = { launcher.launch("audio/*") },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(painterResource(R.drawable.ic_audio_file), contentDescription = audioPickerLabel)
+                    appSettings.prompts.forEach { prompt ->
+                        FilterChip(
+                            selected = prompt.id == selectedPromptId,
+                            onClick = {
+                                if (pendingPromptId != null || prompt.id != appSettings.activePromptId) {
+                                    pendingPromptId = prompt.id
+                                    settingsViewModel.selectPrompt(prompt.id)
+                                }
+                                selectedTab = true
+                            },
+                            label = { Text(prompt.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            shape = CircleShape,
+                            modifier = Modifier.widthIn(max = 160.dp)
+                        )
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                appSettings.prompts.forEach { prompt ->
-                    FilterChip(
-                        selected = prompt.id == selectedPromptId,
-                        onClick = {
-                            if (pendingPromptId != null || prompt.id != appSettings.activePromptId) {
-                                pendingPromptId = prompt.id
-                                settingsViewModel.selectPrompt(prompt.id)
-                            }
-                            selectedTab = true
+                key(isEdited, currentEntry, selectedPromptId.takeIf { isEdited }) {
+                    TranscriptPane(
+                        rawText = transcription,
+                        editedText = selectedResult?.formattedText.orEmpty(),
+                        selectedEdited = isEdited,
+                        onSelectFormatted = { selectedTab = it },
+                        textHeight = textHeight,
+                        onExpand = currentEntry?.let { id ->
+                            { openReader(id, isEdited, selectedPromptId.takeIf { isEdited }) }
                         },
-                        label = { Text(prompt.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        shape = CircleShape,
-                        modifier = Modifier.widthIn(max = 160.dp)
+                        onFormat = {
+                            viewModel.formatText(selectedPromptId).also { started ->
+                                if (started && !isEdited) selectedTab = null
+                            }
+                        },
+                        isBusy = screenState.isBusy,
+                        isFormatting = formattingCurrent
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            key(isEdited, currentEntry, selectedPromptId.takeIf { isEdited }) {
-                TranscriptPane(
-                    rawText = transcription,
-                    editedText = selectedResult?.formattedText.orEmpty(),
-                    selectedEdited = isEdited,
-                    onSelectFormatted = { selectedTab = it },
-                    textHeight = if (isEdited) formattedHeight else transcriptionHeight,
-                    onExpand = currentEntry?.let { id ->
-                        { openReader(id, isEdited, selectedPromptId.takeIf { isEdited }) }
-                    },
-                    onFormat = {
-                        viewModel.formatText(selectedPromptId).also { started ->
-                            if (started && !isEdited) selectedTab = null
-                        }
-                    },
-                    isBusy = screenState.isBusy,
-                    isFormatting = formattingCurrent
-                )
-            }
-
-            if (transcription.isNotBlank()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(10.dp)
-                        .padding(vertical = 4.dp)
-                        .pointerInput(isEdited) {
-                            detectDragGestures { change, dragAmount ->
-                                change.consume()
-                                val deltaDp = with(density) { dragAmount.y.toDp() }
-                                if (!isEdited) {
-                                    transcriptionHeight = (transcriptionHeight + deltaDp).coerceIn(80.dp, 800.dp)
-                                } else {
-                                    formattedHeight = (formattedHeight + deltaDp).coerceIn(80.dp, 800.dp)
-                                }
-                            }
-                        }
-                        .background(Color.Transparent),
-                    contentAlignment = Alignment.Center
-                ) {
+                if (transcription.isNotBlank()) {
                     Box(
                         modifier = Modifier
-                            .width(80.dp)
-                            .height(4.dp)
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-                    )
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .semantics {
+                                contentDescription = "Resize transcript"
+                                progressBarRangeInfo = ProgressBarRangeInfo(textHeight.value, 80f..800f)
+                                setProgress { value ->
+                                    resizeTo(value.dp)
+                                    true
+                                }
+                            }
+                            .pointerInput(isEdited, density) {
+                                detectVerticalDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    val height = if (isEdited) formattedHeight else transcriptionHeight
+                                    resizeTo(height + with(density) { dragAmount.toDp() })
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            Modifier.size(width = 64.dp, height = 4.dp)
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), CircleShape)
+                        )
+                    }
                 }
             }
 
-        }
-
-        // Bottom status area: fixed height so updates don't push main content around.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 64.dp)
-                .padding(top = 8.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-            ) {
-                when (val currentState = uiState) {
-                    is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.PreparingFile -> {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Analyzing ${currentState.fileName}...")
-                            Text("File size: ${formatFileSize(currentState.fileSize)}")
+            if (screenState.isBusy && !formattingCurrent) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    when (val currentState = uiState) {
+                        is TranscriptionUiState.PreparingFile -> {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Analyzing ${currentState.fileName}...")
+                                Text("File size: ${formatFileSize(currentState.fileSize)}")
+                            }
                         }
-                    }
-                    is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.TranscodingFile -> {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Converting ${currentState.fileName}")
-                            Text("From ${currentState.fromFormat} to ${currentState.toFormat}...")
+                        is TranscriptionUiState.TranscodingFile -> {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Converting ${currentState.fileName}")
+                                Text("From ${currentState.fromFormat} to ${currentState.toFormat}...")
+                            }
                         }
-                    }
-                    is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.UploadingFile -> {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Uploading ${currentState.fileName}")
-                            Text("Using model: ${currentState.model}")
+                        is TranscriptionUiState.UploadingFile -> {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Uploading ${currentState.fileName}")
+                                Text("Using model: ${currentState.model}")
+                            }
                         }
-                    }
-                    is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Loading -> {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Transcribing audio...")
-                    }
-                    TranscriptionUiState.WaitingForApiKey -> {
-                        Text("Add an OpenAI API key in Settings to continue.")
-                    }
-                    TranscriptionUiState.FormattingText -> {
-                        if (!formattingCurrent) {
+                        is TranscriptionUiState.Loading -> {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Transcribing audio...")
+                        }
+                        TranscriptionUiState.WaitingForApiKey -> {
+                            Text("Add an OpenAI API key in Settings to continue.")
+                        }
+                        TranscriptionUiState.FormattingText -> {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Editing…")
                         }
-                    }
-                    is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Error -> {
-                        // Show snackbar and reset state once for this error
-                        LaunchedEffect(snackbarHostState, currentState) {
-                            snackbarHostState.showSnackbar(
-                                message = currentState.message,
-                                actionLabel = "Dismiss"
-                            )
-                            viewModel.resetState()
-                        }
-                    }
-                    else -> {
-                        // idle - keep this area minimal to avoid layout jumps
-                        Text("")
+                        else -> Unit
                     }
                 }
             }
-
-            // Snackbar host placed in the bottom area so messages appear without shifting main UI
-            Box(modifier = Modifier.align(Alignment.BottomCenter)) {
-                SnackbarHost(hostState = snackbarHostState)
-            }
         }
     }
-
 }
 
 // Helper function to format file size
