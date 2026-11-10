@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -51,6 +52,19 @@ class TranscriptReaderTest {
         }
 
         composeRule.onNodeWithText("Loading transcript…").assertIsDisplayed()
+    }
+
+    @Test
+    fun transcriptPaneHasCopyAndExpandActions() {
+        var expanded = false
+        composeRule.setContent {
+            MaterialTheme {
+                TranscriptPane("Raw dictation", "Raw transcription", "No text", 150.dp) { expanded = true }
+            }
+        }
+        composeRule.onNodeWithContentDescription("Copy transcript").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Open full screen").performClick()
+        composeRule.runOnIdle { assertTrue(expanded) }
     }
 
 }

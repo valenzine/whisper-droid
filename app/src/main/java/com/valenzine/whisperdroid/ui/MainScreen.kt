@@ -292,7 +292,7 @@ internal fun MainScreen(
                 modifier = Modifier.padding(vertical = 8.dp)
             ) { Text("Format") }
 
-            key(activeTabIndex) {
+            key(activeTabIndex, currentEntry) {
                 TranscriptPane(
                     text = if (isFormatted) formattedText else transcription,
                     label = if (isFormatted) "Formatted text" else "Raw transcription",
