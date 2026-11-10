@@ -4,6 +4,8 @@ import android.net.Uri
 import com.valenzine.whisperdroid.repository.AppSettings
 import com.valenzine.whisperdroid.repository.SettingsGateway
 import com.valenzine.whisperdroid.repository.TranscriptionGateway
+import com.valenzine.whisperdroid.repository.StagedAudio
+import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -164,6 +166,20 @@ class TranscriptionViewModelTest {
         var lastLlmModel: String? = null
         var lastFormattedSource: String? = null
         var formatError: Throwable? = null
+
+        override suspend fun stageUri(uri: Uri): StagedAudio =
+            StagedAudio(File.createTempFile("audio", ".tmp"), "test-audio", "test-fingerprint")
+
+        override suspend fun transcribeStaged(
+            stagedAudio: StagedAudio,
+            apiKey: String,
+            model: String,
+            language: String?,
+            onProgress: ((String) -> Unit)?
+        ): String {
+            transcriptionCalls += 1
+            return transcriptionResult.await()
+        }
 
         override suspend fun transcribeUri(
             uri: Uri,

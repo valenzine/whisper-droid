@@ -19,8 +19,23 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import java.security.MessageDigest
+
+data class StagedAudio(
+    val file: File,
+    val displayName: String,
+    val sha256: String
+)
 
 interface TranscriptionGateway {
+    suspend fun stageUri(uri: Uri): StagedAudio
+    suspend fun transcribeStaged(
+        stagedAudio: StagedAudio,
+        apiKey: String,
+        model: String,
+        language: String? = null,
+        onProgress: ((String) -> Unit)? = null
+    ): String
     suspend fun transcribeUri(
         uri: Uri,
         apiKey: String,
@@ -200,15 +215,27 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         language: String?,
         onProgress: ((String) -> Unit)?
     ): String = withContext(Dispatchers.IO) {
-        val copiedFile = copyUriToCache(uri)
+        val stagedAudio = stageUri(uri)
         try {
-            transcribeFile(copiedFile, apiKey, model, language, onProgress)
+            transcribeStaged(stagedAudio, apiKey, model, language, onProgress)
         } finally {
-            copiedFile.delete()
+            stagedAudio.file.delete()
         }
     }
 
-    private suspend fun copyUriToCache(uri: Uri): File = withContext(Dispatchers.IO) {
+    override suspend fun stageUri(uri: Uri): StagedAudio = copyUriToCache(uri)
+
+    override suspend fun transcribeStaged(
+        stagedAudio: StagedAudio,
+        apiKey: String,
+        model: String,
+        language: String?,
+        onProgress: ((String) -> Unit)?
+    ): String = withContext(Dispatchers.IO) {
+        transcribeFile(stagedAudio.file, apiKey, model, language, onProgress)
+    }
+
+    private suspend fun copyUriToCache(uri: Uri): StagedAudio = withContext(Dispatchers.IO) {
         val metadata = context.contentResolver.query(
             uri,
             arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
@@ -233,6 +260,7 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         val suffix = if (extension.isNotBlank()) ".${extension}" else ".audio"
         val temporary = File.createTempFile("audio-${UUID.randomUUID()}-", suffix, context.cacheDir)
         try {
+            val digest = MessageDigest.getInstance("SHA-256")
             context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(temporary).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -243,10 +271,15 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
                         copied += count
                         require(copied <= MAX_UPLOAD_BYTES) { "File too large (max 25 MB)" }
                         output.write(buffer, 0, count)
+                        digest.update(buffer, 0, count)
                     }
                 }
             } ?: error("Could not open selected audio file")
-            temporary
+            StagedAudio(
+                file = temporary,
+                displayName = displayName,
+                sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+            )
         } catch (error: Throwable) {
             temporary.delete()
             throw error
