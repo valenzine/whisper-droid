@@ -9,16 +9,18 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.valenzine.whisperdroid.WhisperDroidApplication
 
 @Composable
 internal fun Navigation(app: WhisperDroidApplication) {
     val navController = rememberNavController()
+    val currentEntry by navController.currentBackStackEntryAsState()
     NavHost(navController = navController, startDestination = "main") {
         composable("main") {
             val activity = LocalActivity.current
-            BackHandler(enabled = activity?.isTaskRoot == true) {
+            BackHandler(enabled = activity?.isTaskRoot == true && currentEntry?.destination?.route == "main") {
                 activity?.let { if (!it.moveTaskToBack(false)) it.finish() }
             }
             MainScreen(navController, app) { id, formatted ->

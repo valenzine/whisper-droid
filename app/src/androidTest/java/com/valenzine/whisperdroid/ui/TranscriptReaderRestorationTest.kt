@@ -6,6 +6,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.StateRestorationTester
 import androidx.compose.ui.test.assertIsDisplayed
@@ -15,6 +16,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runAndroidComposeUiTest
 import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -33,12 +36,18 @@ class TranscriptReaderRestorationTest {
             MaterialTheme { TranscriptReader(text = text, formatted = false, onBack = {}) }
         }
 
-        onNodeWithTag("transcript-reader-scroll").performTouchInput { swipeUp() }
+        val scrollSurface = onNodeWithTag("transcript-reader-scroll")
+        fun scrollOffset() = scrollSurface.fetchSemanticsNode()
+            .config[SemanticsProperties.VerticalScrollAxisRange].value()
+        scrollSurface.performTouchInput { swipeUp() }
+        val beforeRestore = scrollOffset()
+        assertTrue("Expected a nonzero scroll position before recreation", beforeRestore > 0f)
         restorationTester.emulateSaveAndRestore()
         onNodeWithText("This transcript is unavailable.").assertIsDisplayed()
 
         text = longText
         waitForIdle()
-        onNodeWithTag("transcript-reader-scroll").assertIsDisplayed()
+        scrollSurface.assertIsDisplayed()
+        assertEquals(beforeRestore, scrollOffset(), 1f)
     }
 }
