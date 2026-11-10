@@ -26,7 +26,7 @@ data class TranscriptEntry(
 
 @Dao
 interface TranscriptHistoryDao {
-    @Query("SELECT * FROM TranscriptEntry ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM TranscriptEntry ORDER BY updatedAt DESC, id DESC")
     fun entries(): Flow<List<TranscriptEntry>>
 
     @Query("SELECT * FROM TranscriptEntry WHERE audioFingerprint = :fingerprint LIMIT 1")
