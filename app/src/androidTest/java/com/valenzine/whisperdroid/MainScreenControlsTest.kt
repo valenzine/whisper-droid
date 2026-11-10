@@ -16,21 +16,17 @@ class MainScreenControlsTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun processingControlsExpandOnlyWhenManaged() {
+    fun processingControlsExposePromptPillsAndAutoFormatStatus() {
         composeRule.onNodeWithText("Processing").assertIsDisplayed()
-        composeRule.onNodeWithText("Active processing prompt").assertDoesNotExist()
-        composeRule.onNodeWithText("Manage").performClick()
-        composeRule.onNodeWithText("Automatically process after transcription").assertIsDisplayed()
-        composeRule.onNodeWithText("Active processing prompt").assertIsDisplayed()
-        composeRule.onNodeWithText("New prompt").assertIsDisplayed()
+        composeRule.onNodeWithText("Format manually when ready").assertIsDisplayed()
+        composeRule.onNodeWithText("Default prompt").assertIsDisplayed()
     }
 
     @Test
-    fun historyOpensAsASeparateDestination() {
-        composeRule.onNodeWithText("History").performClick()
+    fun settingsOpensPromptManagement() {
+        composeRule.onNodeWithContentDescription("Settings").performClick()
 
-        composeRule.onNodeWithText("Clear all").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Back").performClick()
-        composeRule.onNodeWithText("Select Audio File").assertIsDisplayed()
+        composeRule.onNodeWithText("Processing prompts").assertIsDisplayed()
+        composeRule.onNodeWithText("Save prompt").assertIsDisplayed()
     }
 }

@@ -3,8 +3,10 @@ package com.valenzine.whisperdroid.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -22,6 +24,9 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.OffsetMapping
 import com.valenzine.whisperdroid.model.ModelCatalog
 import com.valenzine.whisperdroid.repository.AppSettings
+import com.valenzine.whisperdroid.repository.DEFAULT_PROMPT_ID
+import com.valenzine.whisperdroid.repository.SavedPrompt
+import com.valenzine.whisperdroid.model.DEFAULT_LLM_PROMPT
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -178,6 +183,10 @@ fun SettingsScreen() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            PromptManagementCard(settings, viewModel)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Button(onClick = {
                 viewModel.save(
                     AppSettings(
@@ -198,6 +207,93 @@ fun SettingsScreen() {
                 LaunchedEffect(snackbarHostState) {
                     snackbarHostState.showSnackbar("Settings saved!")
                     showSnackbar = false
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PromptManagementCard(settings: AppSettings, viewModel: SettingsViewModel) {
+    var editorId by rememberSaveable { mutableStateOf<String?>(settings.activePromptId) }
+    var nameDraft by rememberSaveable { mutableStateOf("") }
+    var contentDraft by rememberSaveable { mutableStateOf("") }
+    val selectedPrompt = settings.prompts.firstOrNull { it.id == editorId }
+
+    LaunchedEffect(editorId, settings.prompts) {
+        val prompt = settings.prompts.firstOrNull { it.id == editorId }
+        if (prompt != null) {
+            nameDraft = prompt.name
+            contentDraft = prompt.content
+        } else if (editorId != null) {
+            editorId = DEFAULT_PROMPT_ID
+        }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Processing prompts", style = MaterialTheme.typography.titleMedium)
+                    Text("Choose one on the main screen. Edit prompt text here.", style = MaterialTheme.typography.bodyMedium)
+                }
+                TextButton(onClick = {
+                    editorId = null
+                    nameDraft = ""
+                    contentDraft = DEFAULT_LLM_PROMPT
+                }) { Text("New") }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                settings.prompts.forEach { prompt ->
+                    FilterChip(
+                        selected = prompt.id == editorId,
+                        onClick = { editorId = prompt.id },
+                        label = { Text(prompt.name, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = nameDraft,
+                onValueChange = { nameDraft = it },
+                label = { Text("Prompt name") },
+                enabled = selectedPrompt?.isBuiltIn != true,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = contentDraft,
+                onValueChange = { contentDraft = it },
+                label = { Text("Processing instruction") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 4
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = {
+                        if (selectedPrompt == null) viewModel.createPrompt(nameDraft, contentDraft)
+                        else viewModel.updatePrompt(
+                            SavedPrompt(
+                                id = selectedPrompt.id,
+                                name = selectedPrompt.name,
+                                content = contentDraft,
+                                isBuiltIn = selectedPrompt.isBuiltIn
+                            )
+                        )
+                    },
+                    enabled = nameDraft.isNotBlank()
+                ) { Text("Save prompt") }
+                Spacer(modifier = Modifier.width(8.dp))
+                if (selectedPrompt?.isBuiltIn == true) {
+                    TextButton(onClick = { viewModel.resetDefaultPrompt() }) { Text("Reset default") }
+                } else if (selectedPrompt != null) {
+                    TextButton(onClick = {
+                        viewModel.deletePrompt(selectedPrompt.id)
+                        editorId = DEFAULT_PROMPT_ID
+                    }) { Text("Delete") }
                 }
             }
         }

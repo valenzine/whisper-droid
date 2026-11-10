@@ -82,14 +82,18 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun builtInDefaultCannotBeModified() = runTest {
+    fun builtInDefaultKeepsItsIdentityWhileItsContentCanBeCustomizedAndReset() = runTest {
         val repository = newRepository()
 
         repository.updatePrompt(SavedPrompt(DEFAULT_PROMPT_ID, "Changed", "Changed content"))
 
         val default = repository.settingsFlow.first().activePrompt
         assertEquals("Default prompt", default.name)
-        assertEquals(DEFAULT_LLM_PROMPT, default.content)
+        assertEquals("Changed content", default.content)
+        assertEquals(true, default.isBuiltIn)
+
+        repository.resetDefaultPrompt()
+        assertEquals(DEFAULT_LLM_PROMPT, repository.settingsFlow.first().activePrompt.content)
     }
 
     @Test
@@ -105,7 +109,7 @@ class SettingsRepositoryTest {
         assertEquals(2, prompts.size)
         assertEquals(DEFAULT_PROMPT_ID, prompts.first().id)
         assertEquals("Default prompt", prompts.first().name)
-        assertEquals(DEFAULT_LLM_PROMPT, prompts.first().content)
+        assertEquals("Changed", prompts.first().content)
         assertEquals(true, prompts.first().isBuiltIn)
         assertEquals("custom", prompts.last().id)
     }
