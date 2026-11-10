@@ -51,18 +51,18 @@ private fun builtInPrompt() = SavedPrompt(
     isBuiltIn = true
 )
 
-private fun List<SavedPrompt>.ensureBuiltIn(): List<SavedPrompt> =
-    if (any { it.id == DEFAULT_PROMPT_ID }) this else listOf(builtInPrompt()) + this
+private fun List<SavedPrompt>.normalizeBuiltIn(): List<SavedPrompt> =
+    listOf(builtInPrompt()) + filterNot { it.id == DEFAULT_PROMPT_ID }
 
 internal fun decodePrompts(serialized: String?): List<SavedPrompt> {
     val decoded = runCatching {
         promptGson.fromJson<List<SavedPrompt>>(serialized, object : TypeToken<List<SavedPrompt>>() {}.type)
     }.getOrNull().orEmpty()
-    return decoded.ensureBuiltIn().takeIf { decoded.isNotEmpty() } ?: listOf(builtInPrompt())
+    return decoded.normalizeBuiltIn().takeIf { decoded.isNotEmpty() } ?: listOf(builtInPrompt())
 }
 
 private fun storePrompts(preferences: MutablePreferences, prompts: List<SavedPrompt>, selectedId: String) {
-    val normalized = prompts.ensureBuiltIn()
+    val normalized = prompts.normalizeBuiltIn()
     val activeId = selectedId.takeIf { id -> normalized.any { it.id == id } } ?: DEFAULT_PROMPT_ID
     preferences[savedPromptsKey] = promptGson.toJson(normalized)
     preferences[activePromptIdKey] = activeId
@@ -166,6 +166,18 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Settin
             else prompt.copy(name = prompt.name.trim(), content = prompt.content.ifBlank { DEFAULT_LLM_PROMPT })
         }
         val activeId = preferences[activePromptIdKey]?.takeIf { id -> updated.any { it.id == id } } ?: updated.first().id
+        storePrompts(preferences, updated, activeId)
+    }
+
+    suspend fun updatePromptContent(id: String, content: String) = dataStore.edit { preferences ->
+        val prompts = decodePrompts(preferences[savedPromptsKey])
+        val updated = prompts.map { prompt ->
+            if (prompt.id == id && !prompt.isBuiltIn) {
+                prompt.copy(content = content.ifBlank { DEFAULT_LLM_PROMPT })
+            } else prompt
+        }
+        val activeId = preferences[activePromptIdKey]?.takeIf { active -> updated.any { it.id == active } }
+            ?: updated.first().id
         storePrompts(preferences, updated, activeId)
     }
 

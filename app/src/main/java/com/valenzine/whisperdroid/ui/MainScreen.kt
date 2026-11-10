@@ -90,6 +90,7 @@ internal fun MainScreen(
     val density = androidx.compose.ui.platform.LocalDensity.current
     var promptExpanded by rememberSaveable { mutableStateOf(false) }
     var promptDraft by rememberSaveable { mutableStateOf(appSettings.llmPrompt) }
+    var editingPromptId by rememberSaveable { mutableStateOf(appSettings.activePromptId) }
     var promptFocused by remember { mutableStateOf(false) }
     var clearHistoryConfirmation by remember { mutableStateOf(false) }
     var promptMenuExpanded by remember { mutableStateOf(false) }
@@ -97,14 +98,13 @@ internal fun MainScreen(
     var showRenamePrompt by remember { mutableStateOf(false) }
     var showDeletePrompt by remember { mutableStateOf(false) }
 
-    LaunchedEffect(appSettings.llmPrompt) {
+    LaunchedEffect(appSettings.activePromptId, appSettings.llmPrompt, promptFocused) {
         if (!promptFocused) promptDraft = appSettings.llmPrompt
+        if (!promptFocused) editingPromptId = appSettings.activePromptId
     }
-    LaunchedEffect(promptDraft) {
+    LaunchedEffect(promptDraft, editingPromptId) {
         delay(500)
-        if (promptDraft != appSettings.llmPrompt) {
-            settingsViewModel.updatePrompt(appSettings.activePrompt.copy(content = promptDraft))
-        }
+        settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
     }
     LaunchedEffect(screenState.phase) {
         val phase = screenState.phase
@@ -135,7 +135,7 @@ internal fun MainScreen(
                 horizontalArrangement = Arrangement.End
             ) {
                 IconButton(onClick = {
-                    settingsViewModel.updatePrompt(appSettings.activePrompt.copy(content = promptDraft))
+                    settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
                     navController.navigate("settings")
                 }) {
                     Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -218,6 +218,8 @@ internal fun MainScreen(
                                 DropdownMenuItem(
                                     text = { Text(prompt.name) },
                                     onClick = {
+                                        promptFocused = false
+                                        promptExpanded = false
                                         settingsViewModel.selectPrompt(prompt.id)
                                         promptMenuExpanded = false
                                     }
@@ -236,7 +238,7 @@ internal fun MainScreen(
                             TextButton(onClick = {
                                 promptExpanded = !promptExpanded
                                 if (!promptExpanded) {
-                                    settingsViewModel.updatePrompt(appSettings.activePrompt.copy(content = promptDraft))
+                                    settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
                                 }
                             }) {
                                 Text(if (promptExpanded) "Hide editor" else "Edit")
@@ -251,7 +253,7 @@ internal fun MainScreen(
                             modifier = Modifier.fillMaxWidth().onFocusChanged {
                                 promptFocused = it.isFocused
                                 if (!it.isFocused) {
-                                    settingsViewModel.updatePrompt(appSettings.activePrompt.copy(content = promptDraft))
+                                    settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
                                 }
                             },
                             minLines = 4
@@ -493,7 +495,7 @@ internal fun MainScreen(
             onConfirm = { name, content ->
                 settingsViewModel.createPrompt(name, content)
                 showCreatePrompt = false
-                promptExpanded = true
+                promptExpanded = false
             }
         )
     }

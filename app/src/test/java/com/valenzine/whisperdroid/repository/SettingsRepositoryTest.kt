@@ -93,6 +93,40 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun decodedPromptsReplaceAndDeduplicateDefaultEntries() {
+        val prompts = decodePrompts(
+            """[
+                {"id":"default","name":"Changed","content":"Changed","isBuiltIn":false},
+                {"id":"default","name":"Duplicate","content":"Duplicate","isBuiltIn":false},
+                {"id":"custom","name":"Custom","content":"Keep this","isBuiltIn":false}
+            ]"""
+        )
+
+        assertEquals(2, prompts.size)
+        assertEquals(DEFAULT_PROMPT_ID, prompts.first().id)
+        assertEquals("Default prompt", prompts.first().name)
+        assertEquals(DEFAULT_LLM_PROMPT, prompts.first().content)
+        assertEquals(true, prompts.first().isBuiltIn)
+        assertEquals("custom", prompts.last().id)
+    }
+
+    @Test
+    fun delayedPromptUpdateTargetsItsOriginalPromptInsteadOfTheActivePrompt() = runTest {
+        val repository = newRepository()
+        repository.createPrompt("First", "First content")
+        val first = repository.settingsFlow.first().activePrompt
+        repository.createPrompt("Second", "Second content")
+        val second = repository.settingsFlow.first().activePrompt
+
+        repository.updatePromptContent(first.id, "Updated first content")
+
+        val settings = repository.settingsFlow.first()
+        assertEquals(second.id, settings.activePromptId)
+        assertEquals("Second content", settings.llmPrompt)
+        assertEquals("Updated first content", settings.prompts.first { it.id == first.id }.content)
+    }
+
+    @Test
     fun savedNanoModelMigratesWithoutChangingOtherSettings() = runTest {
         val model = stringPreferencesKey("llm_model")
         val prompt = stringPreferencesKey("llm_prompt")
