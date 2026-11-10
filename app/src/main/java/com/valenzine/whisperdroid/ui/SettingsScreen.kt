@@ -28,7 +28,6 @@ import androidx.compose.ui.text.input.OffsetMapping
 import com.valenzine.whisperdroid.model.ModelCatalog
 import com.valenzine.whisperdroid.repository.AppSettings
 import com.valenzine.whisperdroid.repository.DEFAULT_PROMPT_ID
-import com.valenzine.whisperdroid.model.DEFAULT_LLM_PROMPT
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -222,8 +221,7 @@ private fun PromptManagementCard(
     var contentDraft by rememberSaveable(editorId) { mutableStateOf<String?>(null) }
     val selectedPrompt = settings.prompts.firstOrNull { it.id == editorId }
     val promptName = nameDraft ?: selectedPrompt?.name.orEmpty()
-    val promptContent = contentDraft ?: selectedPrompt?.content
-        ?: if (editorId == null) DEFAULT_LLM_PROMPT else ""
+    val promptContent = contentDraft ?: selectedPrompt?.content.orEmpty()
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -304,7 +302,8 @@ private fun PromptManagementCard(
                             contentDraft = null
                         }
                     },
-                    enabled = promptName.isNotBlank() && (editorId == null || selectedPrompt != null)
+                    enabled = promptName.isNotBlank() &&
+                        (selectedPrompt != null || editorId == null && promptContent.isNotBlank())
                 ) { Text("Save prompt") }
                 Spacer(modifier = Modifier.width(8.dp))
                 if (selectedPrompt?.isBuiltIn == true) {

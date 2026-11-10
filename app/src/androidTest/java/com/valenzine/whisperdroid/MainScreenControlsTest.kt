@@ -1,14 +1,22 @@
 package com.valenzine.whisperdroid
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
@@ -45,11 +53,19 @@ class MainScreenControlsTest {
     }
 
     @Test
-    fun settingsOpensPromptManagement() {
+    fun settingsOpensPromptManagementWithAnEmptyNewDraft() {
         composeRule.onNodeWithContentDescription("Settings").performClick()
 
         composeRule.onNodeWithText("Editing prompts").assertIsDisplayed()
         composeRule.onNodeWithText("Edit new transcripts automatically").assertIsDisplayed()
-        composeRule.onNodeWithText("Save prompt").assertIsDisplayed()
+        composeRule.onNodeWithText("New").performClick()
+        val instruction = composeRule.onNode(hasSetTextAction() and hasText("Processing instruction"))
+        instruction.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+
+        composeRule.onNode(hasSetTextAction() and hasText("Prompt name")).performTextReplacement("New prompt")
+        val save = composeRule.onNodeWithText("Save prompt")
+        save.assertIsNotEnabled()
+        instruction.performTextReplacement("Summarize in one sentence.")
+        save.assertIsEnabled()
     }
 }
