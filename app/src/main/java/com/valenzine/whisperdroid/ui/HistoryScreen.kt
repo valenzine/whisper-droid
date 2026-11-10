@@ -215,9 +215,9 @@ private fun HistoryEntryCard(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onOpen, enabled = !isBusy) { Text("Open") }
-                TextButton(onClick = onReadRaw) { Text("Raw") }
+                TextButton(onClick = onReadRaw) { Text("Transcript") }
                 TextButton(onClick = onPromptResults) {
-                    Text(if (entry.formattedText.isNotBlank()) "Prompt results" else "Format")
+                    Text(if (entry.formattedText.isNotBlank()) "Edits" else "Edit")
                 }
             }
         }

@@ -1,19 +1,20 @@
 package com.valenzine.whisperdroid.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -21,12 +22,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,18 +34,20 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.valenzine.whisperdroid.R
 import com.valenzine.whisperdroid.WhisperDroidApplication
+import com.valenzine.whisperdroid.history.PREVIOUS_RESULT_PROMPT_ID
 import com.valenzine.whisperdroid.repository.AppSettings
-import com.valenzine.whisperdroid.repository.SavedPrompt
 import com.valenzine.whisperdroid.viewmodel.TranscriptionUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,18 +58,29 @@ internal fun HistoryPromptResultsScreen(
     onBack: () -> Unit,
     openResult: (String) -> Unit
 ) {
-    val results by remember(entryId) { app.history.results(entryId) }.collectAsState(initial = emptyList())
+    val loadedResults by remember(entryId) { app.history.results(entryId) }.collectAsState(initial = null)
+    val results = loadedResults.orEmpty()
     val settings by app.settings.settingsFlow.collectAsState(initial = AppSettings())
-    val screenState by app.transcription.screenState.collectAsState()
-    val isThisRun = screenState.formattingEntryId == entryId
-    val isFormatting = isThisRun && screenState.phase is TranscriptionUiState.FormattingText
-    var selectedPromptId by rememberSaveable { mutableStateOf<String?>(null) }
-    var deletePromptId by rememberSaveable { mutableStateOf<String?>(null) }
+    val state by app.transcription.screenState.collectAsState()
+    val options = settings.prompts.map { PromptOption(it.id, it.name, isAvailable = true) } +
+        results.filterNot { result -> settings.prompts.any { it.id == result.promptId } }.map { result ->
+            val name = if (result.promptId == PREVIOUS_RESULT_PROMPT_ID) "Earlier edit" else result.promptName
+            PromptOption(result.promptId, name, isAvailable = false)
+        }
+
+    var chosenId by rememberSaveable(entryId) { mutableStateOf<String?>(null) }
+    var deleteId by rememberSaveable(entryId) { mutableStateOf<String?>(null) }
+    val defaultId = results.firstOrNull()?.promptId ?: settings.activePromptId
+    val selected = options.firstOrNull { it.id == chosenId } ?: options.firstOrNull { it.id == defaultId }
+    val result = results.firstOrNull { it.promptId == selected?.id }
+    val isEarlierEdit = selected?.id == PREVIOUS_RESULT_PROMPT_ID
+    val isSelectedRun = state.formattingEntryId == entryId && state.formattingPromptId == selected?.id
+    val isEditing = isSelectedRun && state.phase is TranscriptionUiState.FormattingText
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Prompt results") },
+                title = { Text("Edits") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -76,138 +89,103 @@ internal fun HistoryPromptResultsScreen(
             )
         }
     ) { insets ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(insets),
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
-            item {
-                Column(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        if (results.isEmpty()) "Choose a prompt to format the saved transcription."
-                        else "Open a saved result or run a prompt on the raw transcription.",
-                        style = MaterialTheme.typography.bodyMedium
+        Column(Modifier.fillMaxSize().padding(insets).padding(horizontal = 16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                options.forEach { option ->
+                    FilterChip(
+                        selected = option.id == selected?.id,
+                        onClick = { chosenId = option.id },
+                        label = { Text(option.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        shape = CircleShape,
+                        modifier = Modifier.widthIn(max = 160.dp)
                     )
-                    if (isFormatting) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                }
+            }
+            val provenance = when {
+                isEarlierEdit -> "Prompt unknown"
+                selected?.isAvailable == false -> "Prompt removed"
+                result != null && result.promptName != selected?.name -> "Edited with ${result.promptName}"
+                else -> null
+            }
+            provenance?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            if (isSelectedRun) {
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                if (result == null) {
+                    Text(
+                        if (loadedResults == null) "Loading edits…" else "No saved edit for this prompt.",
+                        modifier = Modifier.padding(top = 16.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    key(result.promptId) {
+                        Box(
+                            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                                .padding(vertical = 16.dp)
                         ) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Text("Formatting…")
-                        }
-                    } else {
-                        Button(
-                            onClick = { selectedPromptId = settings.activePromptId },
-                            enabled = !screenState.isBusy
-                        ) { Text("Run a prompt") }
-                    }
-                    if (isThisRun) {
-                        screenState.error?.let { error ->
-                            Text(error, color = MaterialTheme.colorScheme.error)
+                            MarkdownTranscriptText(result.formattedText)
                         }
                     }
                 }
             }
-            items(results, key = { it.promptId }) { result ->
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                ListItem(
-                    modifier = Modifier.clickable { openResult(result.promptId) },
-                    headlineContent = {
-                        Text(result.promptName, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    },
-                    supportingContent = result.summary.takeIf(String::isNotBlank)?.let { summary ->
-                        { Text(summary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                    },
-                    trailingContent = {
-                        IconButton(
-                            onClick = { deletePromptId = result.promptId },
-                            enabled = !screenState.isBusy
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete result for ${result.promptName}")
+
+            HorizontalDivider()
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                when {
+                    isEditing -> {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text("Editing…", modifier = Modifier.padding(start = 8.dp))
+                    }
+                    selected?.isAvailable == true -> {
+                        val run = { app.transcription.formatHistoryEntry(entryId, selected.id) }
+                        val enabled = loadedResults != null && !state.isBusy
+                        if (result == null) {
+                            Button(onClick = { run() }, enabled = enabled) { Text("Edit transcript") }
+                        } else {
+                            TextButton(onClick = { run() }, enabled = enabled) { Text("Run again") }
                         }
                     }
-                )
+                }
+                Spacer(Modifier.weight(1f))
+                if (result != null) {
+                    CopyTranscriptButton(result.formattedText, selected?.name ?: "Edited")
+                    IconButton(onClick = { openResult(result.promptId) }) {
+                        Icon(painterResource(R.drawable.ic_fullscreen), contentDescription = "Open full screen")
+                    }
+                    IconButton(onClick = { deleteId = result.promptId }, enabled = !state.isBusy) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete selected edit")
+                    }
+                }
             }
         }
     }
 
-    selectedPromptId?.let { promptId ->
-        val selected = settings.prompts.firstOrNull { it.id == promptId }
-        ChooseHistoryPromptDialog(
-            prompts = settings.prompts,
-            selectedPromptId = promptId,
-            savedPromptIds = results.map { it.promptId }.toSet(),
-            onSelect = { selectedPromptId = it },
-            onDismiss = { selectedPromptId = null },
-            canRun = selected != null && !screenState.isBusy,
-            onRun = {
-                if (app.transcription.formatHistoryEntry(entryId, promptId)) selectedPromptId = null
-            }
-        )
-    }
-
-    results.firstOrNull { it.promptId == deletePromptId }?.let { result ->
+    results.firstOrNull { it.promptId == deleteId }?.let { saved ->
+        val name = if (saved.promptId == PREVIOUS_RESULT_PROMPT_ID) "Earlier edit" else saved.promptName
         AlertDialog(
-            onDismissRequest = { deletePromptId = null },
-            title = { Text("Delete this result?") },
-            text = { Text("Remove the saved output for “${result.promptName}”.") },
+            onDismissRequest = { deleteId = null },
+            title = { Text("Delete this edit?") },
+            text = { Text("Remove the saved output for “$name”.") },
             confirmButton = {
                 TextButton(
-                    enabled = !screenState.isBusy,
                     onClick = {
-                        app.transcription.deletePromptResult(entryId, result.promptId)
-                        deletePromptId = null
-                    }
+                        app.transcription.deletePromptResult(entryId, saved.promptId)
+                        deleteId = null
+                    },
+                    enabled = !state.isBusy
                 ) { Text("Delete") }
             },
-            dismissButton = { TextButton(onClick = { deletePromptId = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { deleteId = null }) { Text("Cancel") } }
         )
     }
 }
 
-@Composable
-private fun ChooseHistoryPromptDialog(
-    prompts: List<SavedPrompt>,
-    selectedPromptId: String,
-    savedPromptIds: Set<String>,
-    canRun: Boolean,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onRun: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Choose a prompt") },
-        text = {
-            LazyColumn(Modifier.heightIn(max = 320.dp).selectableGroup()) {
-                items(prompts, key = { it.id }) { prompt ->
-                    val selected = prompt.id == selectedPromptId
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .selectable(selected = selected, role = Role.RadioButton, onClick = { onSelect(prompt.id) })
-                            .heightIn(min = 48.dp).padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        RadioButton(selected = selected, onClick = null)
-                        Column {
-                            Text(prompt.name)
-                            if (prompt.id in savedPromptIds) {
-                                Text("Replaces the saved result", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onRun, enabled = canRun) {
-                Text(if (selectedPromptId in savedPromptIds) "Run again" else "Run prompt")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
+private data class PromptOption(val id: String, val name: String, val isAvailable: Boolean)

@@ -53,22 +53,18 @@ class HistoryPromptResultsTest {
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithText("A test summary.").fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onAllNodesWithText("Prompt results").onFirst().performClick()
-            composeRule.onNodeWithText("Previous result").assertIsDisplayed()
+            composeRule.onAllNodesWithText("Edits").onFirst().performClick()
+            composeRule.onNodeWithText("Earlier edit").performClick()
+            composeRule.onNodeWithText("Prompt unknown").assertIsDisplayed()
+            onView(withText("Older formatted output.")).check(matches(isDisplayed()))
             composeRule.onNodeWithText("Tidy up").performClick()
             onView(withText("Output from Tidy up.")).check(matches(isDisplayed()))
-            composeRule.onNodeWithContentDescription("Back").performClick()
-
-            composeRule.onNodeWithText("Run a prompt").performClick()
-            composeRule.onNodeWithText("Choose a prompt").assertIsDisplayed()
-            composeRule.onNodeWithText("Replaces the saved result").assertIsDisplayed()
-            composeRule.onNodeWithText("Cancel").performClick()
-            composeRule.onNodeWithContentDescription("Delete result for Tidy up").performClick()
+            composeRule.onNodeWithContentDescription("Delete selected edit").performClick()
             composeRule.onNodeWithText("Delete").performClick()
             composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithText("Tidy up").fetchSemanticsNodes().isEmpty()
+                composeRule.onAllNodesWithText("No saved edit for this prompt.").fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithText("Previous result").assertIsDisplayed()
+            composeRule.onNodeWithText("Earlier edit").assertIsDisplayed()
 
             assertEquals("Saved raw transcript.", runBlocking { history.entry(entry.id).first()?.rawText })
             assertEquals("Older formatted output.", runBlocking { history.entry(entry.id).first()?.formattedText })
