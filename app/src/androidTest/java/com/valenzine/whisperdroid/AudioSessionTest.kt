@@ -33,7 +33,7 @@ class AudioSessionTest {
             try {
                 val session = AudioSession(
                     scope = scope,
-                    stage = { uri ->
+                    stage = { uri, _ ->
                         val name = requireNotNull(uri.lastPathSegment)
                         StagedAudio(if (name == "first") firstFile else nextFile, name, name)
                     },

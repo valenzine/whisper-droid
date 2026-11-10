@@ -20,12 +20,16 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 import java.security.MessageDigest
+import com.google.gson.Gson
 
 data class StagedAudio(
     val file: File,
     val displayName: String,
-    val sha256: String
+    val sha256: String,
+    val sourceOrigin: String = "Audio"
 )
+
+data class FormattedTranscript(val text: String, val summary: String)
 
 interface TranscriptionGateway {
     suspend fun transcribeStaged(
@@ -36,7 +40,7 @@ interface TranscriptionGateway {
         onProgress: ((String) -> Unit)? = null
     ): String
 
-    suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): String
+    suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): FormattedTranscript
 }
 
 class TranscriptionRepository(context: Context) : TranscriptionGateway {
@@ -215,7 +219,7 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         transcribeFile(stagedAudio.file, apiKey, model, language, onProgress)
     }
 
-    internal suspend fun stageUri(uri: Uri): StagedAudio = withContext(Dispatchers.IO) {
+    internal suspend fun stageUri(uri: Uri, sourceOrigin: String = "Audio"): StagedAudio = withContext(Dispatchers.IO) {
         val metadata = context.contentResolver.query(
             uri,
             arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
@@ -259,7 +263,8 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
             StagedAudio(
                 file = temporary,
                 displayName = displayName,
-                sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+                sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) },
+                sourceOrigin = sourceOrigin
             )
         } catch (error: Throwable) {
             temporary.delete()
@@ -388,15 +393,29 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         return response.text
     }
 
-    override suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): String {
+    override suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): FormattedTranscript {
         require(text.isNotBlank()) { "There is no transcription to format" }
         val userPrompt = "$prompt\n\n$text"
         
         val request = LlmRequest(
             model = model,
             reasoningEffort = if (model == ModelCatalog.GPT_6_LUNA) "none" else null,
+            responseFormat = ResponseFormat(
+                jsonSchema = JsonSchema(
+                    name = "formatted_transcript",
+                    schema = mapOf(
+                        "type" to "object",
+                        "additionalProperties" to false,
+                        "properties" to mapOf(
+                            "text" to mapOf("type" to "string"),
+                            "summary" to mapOf("type" to "string")
+                        ),
+                        "required" to listOf("text", "summary")
+                    )
+                )
+            ),
             messages = listOf(
-                Message("system", "You are a direct text formatting engine. Provide ONLY the formatted text requested by the user, with no additional commentary, introductions, or conclusions."),
+                Message("system", "Edit the transcript as requested. Return JSON only. The summary must be one concise sentence describing the transcript, without copying it verbatim."),
                 Message("user", userPrompt)
             )
         )
@@ -405,7 +424,9 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
             authorization = "Bearer $apiKey",
             request = request
         )
-        return response.choices.first().message.content
+        val payload = Gson().fromJson(response.choices.first().message.content, FormattedTranscript::class.java)
+        require(payload.text.isNotBlank()) { "Formatting response did not include text" }
+        return payload.copy(summary = payload.summary.trim())
     }
     
     private companion object {

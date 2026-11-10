@@ -15,14 +15,15 @@ import kotlinx.coroutines.sync.Semaphore
 /** Reserves one running and one waiting audio slot, including while a share is being copied. */
 internal class AudioSession(
     private val scope: CoroutineScope,
-    private val stage: suspend (Uri) -> StagedAudio,
+    private val stage: suspend (Uri, String) -> StagedAudio,
     private val process: suspend (StagedAudio, String?, String?) -> Unit,
     private val showError: (Exception) -> Unit
 ) {
     private class Request(
         val staged: Deferred<StagedAudio>,
         val language: String?,
-        val expectedFingerprint: String?
+        val expectedFingerprint: String?,
+        val sourceOrigin: String
     )
 
     private val slots = Semaphore(2)
@@ -51,18 +52,18 @@ internal class AudioSession(
     }
 
     /** The receiver can release its URI grant as soon as the returned signal completes. */
-    fun enqueue(uri: Uri, language: String?, expectedFingerprint: String? = null): Deferred<Unit>? {
+    fun enqueue(uri: Uri, language: String?, expectedFingerprint: String? = null, sourceOrigin: String = "Audio"): Deferred<Unit>? {
         if (!slots.tryAcquire()) return null
 
         val copyFinished = CompletableDeferred<Unit>()
         val staged = scope.async(start = CoroutineStart.LAZY) {
             try {
-                stage(uri)
+                stage(uri, sourceOrigin)
             } finally {
                 copyFinished.complete(Unit)
             }
         }
-        check(requests.trySend(Request(staged, language, expectedFingerprint)).isSuccess)
+        check(requests.trySend(Request(staged, language, expectedFingerprint, sourceOrigin)).isSuccess)
         staged.start()
         return copyFinished
     }

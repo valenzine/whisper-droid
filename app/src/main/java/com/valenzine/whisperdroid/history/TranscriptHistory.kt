@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(indices = [Index(value = ["audioFingerprint"], unique = true)])
@@ -20,6 +22,8 @@ data class TranscriptEntry(
     val displayName: String,
     val rawText: String,
     val formattedText: String = "",
+    val summary: String = "",
+    val sourceOrigin: String = "Audio",
     val createdAt: Long,
     val updatedAt: Long
 )
@@ -41,8 +45,8 @@ interface TranscriptHistoryDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entry: TranscriptEntry): Long
 
-    @Query("UPDATE TranscriptEntry SET formattedText = :formattedText, updatedAt = :updatedAt WHERE id = :id")
-    suspend fun updateFormattedText(id: Long, formattedText: String, updatedAt: Long)
+    @Query("UPDATE TranscriptEntry SET formattedText = :formattedText, summary = :summary, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateFormattedText(id: Long, formattedText: String, summary: String, updatedAt: Long)
 
     @Query("UPDATE TranscriptEntry SET displayName = :displayName, rawText = :rawText, formattedText = '', updatedAt = :updatedAt WHERE id = :id")
     suspend fun replaceTranscription(id: Long, displayName: String, rawText: String, updatedAt: Long)
@@ -54,7 +58,7 @@ interface TranscriptHistoryDao {
     suspend fun clear()
 }
 
-@Database(entities = [TranscriptEntry::class], version = 1, exportSchema = false)
+@Database(entities = [TranscriptEntry::class], version = 2, exportSchema = false)
 abstract class TranscriptHistoryDatabase : RoomDatabase() {
     abstract fun transcriptHistoryDao(): TranscriptHistoryDao
 
@@ -63,7 +67,14 @@ abstract class TranscriptHistoryDatabase : RoomDatabase() {
             context.applicationContext,
             TranscriptHistoryDatabase::class.java,
             "transcript-history.db"
-        ).build()
+        ).addMigrations(MIGRATION_1_2).build()
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE TranscriptEntry ADD COLUMN summary TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE TranscriptEntry ADD COLUMN sourceOrigin TEXT NOT NULL DEFAULT 'Audio'")
+            }
+        }
     }
 }
 
@@ -76,20 +87,21 @@ class TranscriptHistoryRepository(private val dao: TranscriptHistoryDao) {
 
     suspend fun find(fingerprint: String) = dao.findByFingerprint(fingerprint)
 
-    suspend fun saveRaw(fingerprint: String, displayName: String, rawText: String): TranscriptEntry {
+    suspend fun saveRaw(fingerprint: String, displayName: String, rawText: String, sourceOrigin: String): TranscriptEntry {
         val now = System.currentTimeMillis()
         val entry = TranscriptEntry(
             audioFingerprint = fingerprint,
             displayName = displayName,
             rawText = rawText,
+            sourceOrigin = sourceOrigin,
             createdAt = now,
             updatedAt = now
         )
         return entry.copy(id = dao.insert(entry))
     }
 
-    suspend fun saveFormatted(id: Long, formattedText: String) =
-        dao.updateFormattedText(id, formattedText, System.currentTimeMillis())
+    suspend fun saveFormatted(id: Long, formattedText: String, summary: String) =
+        dao.updateFormattedText(id, formattedText, summary, System.currentTimeMillis())
 
     suspend fun replaceTranscription(id: Long, displayName: String, rawText: String) =
         dao.replaceTranscription(id, displayName, rawText, System.currentTimeMillis())

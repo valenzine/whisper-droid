@@ -151,7 +151,7 @@ class TranscriptionViewModel(
                 }
             }
             val entryId = if (saved == null) {
-                historyRepository?.saveRaw(audio.sha256, audio.displayName, result)?.id
+                historyRepository?.saveRaw(audio.sha256, audio.displayName, result, audio.sourceOrigin)?.id
             } else {
                 historyRepository.replaceTranscription(saved.id, audio.displayName, result)
                 saved.id
@@ -193,10 +193,10 @@ class TranscriptionViewModel(
                 return
             }
             val result = repository.formatText(source, settings.apiKey, settings.llmPrompt, settings.llmModel)
-            entryId?.let { historyRepository?.saveFormatted(it, result) }
+            entryId?.let { historyRepository?.saveFormatted(it, result.text, result.summary) }
             _screenState.value = _screenState.value.copy(
-                formattedText = result,
-                phase = TranscriptionUiState.Success(source, result),
+                formattedText = result.text,
+                phase = TranscriptionUiState.Success(source, result.text),
                 error = null,
                 errorDetails = null
             )

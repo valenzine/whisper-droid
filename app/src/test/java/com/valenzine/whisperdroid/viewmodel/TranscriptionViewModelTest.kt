@@ -4,6 +4,7 @@ import com.valenzine.whisperdroid.repository.AppSettings
 import com.valenzine.whisperdroid.repository.SettingsGateway
 import com.valenzine.whisperdroid.repository.TranscriptionGateway
 import com.valenzine.whisperdroid.repository.StagedAudio
+import com.valenzine.whisperdroid.repository.FormattedTranscript
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -180,13 +181,13 @@ class TranscriptionViewModelTest {
             return transcriptionResult.await()
         }
 
-        override suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): String {
+        override suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): FormattedTranscript {
             formatCalls += 1
             lastPrompt = prompt
             lastLlmModel = model
             lastFormattedSource = text
             formatError?.let { throw it }
-            return "edited dictation"
+            return FormattedTranscript("edited dictation", "An edited dictation.")
         }
     }
 

@@ -46,6 +46,8 @@ import androidx.navigation.NavController
 import com.valenzine.whisperdroid.WhisperDroidApplication
 import com.valenzine.whisperdroid.history.TranscriptEntry
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -190,6 +192,18 @@ private fun HistoryEntryCard(
                     }
                 }
             }
+            if (entry.summary.isNotBlank()) {
+                Text(
+                    entry.summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                "${entry.sourceOrigin} · ${DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(entry.createdAt))}",
+                style = MaterialTheme.typography.bodySmall
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onOpen, enabled = !isBusy) { Text("Open") }
                 TextButton(onClick = onReadRaw) { Text("Read raw") }

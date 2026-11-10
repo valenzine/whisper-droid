@@ -31,7 +31,7 @@ class ShareReceiverActivity : ComponentActivity() {
             return
         }
         val session = (application as WhisperDroidApplication).audioSession
-        val staged = intake.receive { session.enqueue(uri, session.shareLanguage) }
+        val staged = intake.receive { session.enqueue(uri, session.shareLanguage, sourceOrigin = sourceOrigin(uri)) }
         if (staged == null) {
             Toast.makeText(this, "The audio queue is full. Share this audio again later.", Toast.LENGTH_LONG).show()
             finish()
@@ -57,6 +57,16 @@ class ShareReceiverActivity : ComponentActivity() {
         return uri.takeIf {
             checkUriPermission(it, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION) ==
                 PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun sourceOrigin(uri: Uri): String {
+        val caller = if (android.os.Build.VERSION.SDK_INT >= 35) callingPackage else null
+        return when {
+            caller in setOf("org.telegram.messenger", "org.telegram.messenger.web") || uri.authority.orEmpty().contains("telegram", true) -> "Telegram"
+            caller in setOf("com.whatsapp", "com.whatsapp.w4b") || uri.authority.orEmpty().contains("whatsapp", true) -> "WhatsApp"
+            uri.authority.orEmpty().contains("documents", true) || uri.authority.orEmpty().contains("downloads", true) -> "Files"
+            else -> "Shared audio"
         }
     }
 }
