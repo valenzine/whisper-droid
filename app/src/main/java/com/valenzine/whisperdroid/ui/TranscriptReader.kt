@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -19,12 +18,18 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import android.text.style.UnderlineSpan
 import android.widget.TextView
+import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
+import io.noties.markwon.MarkwonSpansFactory
+import io.noties.markwon.core.CorePlugin
+import org.commonmark.node.Link
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,7 +42,17 @@ internal fun TranscriptReader(text: String?, formatted: Boolean, onBack: () -> U
             }
         } else {
             val context = LocalContext.current
-            val markwon = remember(context) { Markwon.create(context) }
+            val markwon = remember(context) {
+                Markwon.builderNoCore(context)
+                    .usePlugin(CorePlugin.create().hasExplicitMovementMethod(true))
+                    .usePlugin(object : AbstractMarkwonPlugin() {
+                        override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
+                            builder.setFactory(Link::class.java) { _, _ -> UnderlineSpan() }
+                        }
+                    })
+                    .build()
+            }
+            val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
             Box(
                 Modifier.fillMaxSize().padding(insets).testTag("transcript-reader-scroll")
                     .verticalScroll(rememberScrollState()).padding(16.dp)
@@ -47,10 +62,10 @@ internal fun TranscriptReader(text: String?, formatted: Boolean, onBack: () -> U
                         TextView(context).apply {
                             setTextIsSelectable(true)
                             textSize = 18f
-                            movementMethod = null
                         }
                     },
                     update = { view ->
+                        view.setTextColor(textColor)
                         if (view.tag != text) {
                             markwon.setMarkdown(view, text)
                             view.tag = text

@@ -1,5 +1,9 @@
 package com.valenzine.whisperdroid.ui
 
+import android.text.Spanned
+import android.text.style.ClickableSpan
+import android.widget.TextView
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -7,7 +11,14 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.noties.markwon.core.spans.HeadingSpan
+import org.hamcrest.Matchers.containsString
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -27,7 +38,7 @@ class TranscriptReaderTest {
         }
 
         composeRule.onNodeWithText("Raw transcription").assertIsDisplayed()
-        composeRule.onNodeWithText("Raw dictation").assertIsDisplayed()
+        onView(withText("Raw dictation")).check(matches(isDisplayed()))
     }
 
     @Test
@@ -35,17 +46,25 @@ class TranscriptReaderTest {
         composeRule.setContent {
             MaterialTheme {
                 TranscriptReader(
-                    text = "# Heading\n\n- *emphasized* item\n\n> quoted\n\n`code`",
+                    text = "# Heading\n\n- *emphasized* item\n\n> quoted\n\n`code`\n\n[Example](https://example.com)",
                     formatted = true,
                     onBack = {}
                 )
             }
         }
 
-        composeRule.onNodeWithText("Heading").assertIsDisplayed()
-        composeRule.onNodeWithText("emphasized item").assertIsDisplayed()
-        composeRule.onNodeWithText("quoted").assertIsDisplayed()
-        composeRule.onNodeWithText("code").assertIsDisplayed()
+        onView(withText(containsString("emphasized item"))).check { view, error ->
+            if (error != null) throw error
+            val textView = view as TextView
+            val rendered = textView.text as Spanned
+            assertTrue(rendered.toString().contains("quoted"))
+            assertTrue(rendered.toString().contains("code"))
+            assertFalse(rendered.toString().contains("# Heading"))
+            assertTrue(rendered.getSpans(0, "Heading".length, HeadingSpan::class.java).isNotEmpty())
+            assertTrue(textView.isTextSelectable)
+            assertTrue(textView.movementMethod?.canSelectArbitrarily() == true)
+            assertTrue(rendered.getSpans(0, rendered.length, ClickableSpan::class.java).isEmpty())
+        }
     }
 
     @Test
@@ -58,7 +77,7 @@ class TranscriptReaderTest {
         }
 
         composeRule.onNodeWithText("Formatted text").assertIsDisplayed()
-        composeRule.onNodeWithText("Formatted paragraph.").assertIsDisplayed()
+        onView(withText("Formatted paragraph.")).check(matches(isDisplayed()))
         composeRule.onNodeWithContentDescription("Back").performClick()
         composeRule.runOnIdle { assertTrue(returned) }
     }
