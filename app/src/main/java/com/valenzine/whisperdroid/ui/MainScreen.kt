@@ -126,8 +126,13 @@ internal fun MainScreen(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Text(
+                    "Whisper Droid",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge
+                )
                 TextButton(onClick = { navController.navigate("history") }) { Text("History") }
                 IconButton(onClick = {
                     settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
@@ -199,74 +204,74 @@ internal fun MainScreen(
                         }
                     }
                     if (promptExpanded) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Automatically process after transcription", modifier = Modifier.weight(1f))
-                        Switch(checked = appSettings.autoProcess, onCheckedChange = settingsViewModel::setAutoProcess)
-                    }
-                    ExposedDropdownMenuBox(
-                        expanded = promptMenuExpanded,
-                        onExpandedChange = { promptMenuExpanded = !promptMenuExpanded }
-                    ) {
-                        TextField(
-                            value = appSettings.activePrompt.name,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Active processing prompt") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(promptMenuExpanded) },
-                            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = promptMenuExpanded,
-                            onDismissRequest = { promptMenuExpanded = false }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            appSettings.prompts.forEach { prompt ->
-                                DropdownMenuItem(
-                                    text = { Text(prompt.name) },
-                                    onClick = {
-                                        promptFocused = false
-                                        promptExpanded = false
-                                        promptEditorVisible = false
-                                        settingsViewModel.selectPrompt(prompt.id)
-                                        promptMenuExpanded = false
-                                    }
-                                )
-                            }
+                            Text("Automatically process after transcription", modifier = Modifier.weight(1f))
+                            Switch(checked = appSettings.autoProcess, onCheckedChange = settingsViewModel::setAutoProcess)
                         }
-                    }
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        TextButton(onClick = { showCreatePrompt = true }) { Text("New prompt") }
-                        if (!appSettings.activePrompt.isBuiltIn) {
-                            TextButton(onClick = { showRenamePrompt = true }) { Text("Rename") }
-                            TextButton(onClick = { showDeletePrompt = true }) { Text("Delete") }
-                        }
-                        Spacer(modifier = Modifier.weight(1f))
-                        if (!appSettings.activePrompt.isBuiltIn) {
-                            TextButton(onClick = { promptEditorVisible = !promptEditorVisible }) {
-                                Text(if (promptEditorVisible) "Hide editor" else "Edit")
-                            }
-                        }
-                    }
-                    if (!appSettings.activePrompt.isBuiltIn && promptEditorVisible) {
-                        OutlinedTextField(
-                            value = promptDraft,
-                            onValueChange = { promptDraft = it },
-                            label = { Text("Processing instruction") },
-                            modifier = Modifier.fillMaxWidth().onFocusChanged {
-                                promptFocused = it.isFocused
-                                if (!it.isFocused) {
-                                    settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
+                        ExposedDropdownMenuBox(
+                            expanded = promptMenuExpanded,
+                            onExpandedChange = { promptMenuExpanded = !promptMenuExpanded }
+                        ) {
+                            TextField(
+                                value = appSettings.activePrompt.name,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Active processing prompt") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(promptMenuExpanded) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                            )
+                            ExposedDropdownMenu(
+                                expanded = promptMenuExpanded,
+                                onDismissRequest = { promptMenuExpanded = false }
+                            ) {
+                                appSettings.prompts.forEach { prompt ->
+                                    DropdownMenuItem(
+                                        text = { Text(prompt.name) },
+                                        onClick = {
+                                            promptFocused = false
+                                            promptExpanded = false
+                                            promptEditorVisible = false
+                                            settingsViewModel.selectPrompt(prompt.id)
+                                            promptMenuExpanded = false
+                                        }
+                                    )
                                 }
-                            },
-                            minLines = 4
-                        )
-                        TextButton(onClick = { promptDraft = DEFAULT_LLM_PROMPT }) {
-                            Text("Reset to default prompt")
+                            }
                         }
-                    }
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            TextButton(onClick = { showCreatePrompt = true }) { Text("New prompt") }
+                            if (!appSettings.activePrompt.isBuiltIn) {
+                                TextButton(onClick = { showRenamePrompt = true }) { Text("Rename") }
+                                TextButton(onClick = { showDeletePrompt = true }) { Text("Delete") }
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            if (!appSettings.activePrompt.isBuiltIn) {
+                                TextButton(onClick = { promptEditorVisible = !promptEditorVisible }) {
+                                    Text(if (promptEditorVisible) "Hide editor" else "Edit")
+                                }
+                            }
+                        }
+                        if (!appSettings.activePrompt.isBuiltIn && promptEditorVisible) {
+                            OutlinedTextField(
+                                value = promptDraft,
+                                onValueChange = { promptDraft = it },
+                                label = { Text("Processing instruction") },
+                                modifier = Modifier.fillMaxWidth().onFocusChanged {
+                                    promptFocused = it.isFocused
+                                    if (!it.isFocused) {
+                                        settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
+                                    }
+                                },
+                                minLines = 4
+                            )
+                            TextButton(onClick = { promptDraft = DEFAULT_LLM_PROMPT }) {
+                                Text("Reset to default prompt")
+                            }
+                        }
                     }
                 }
             }
