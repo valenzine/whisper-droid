@@ -13,7 +13,8 @@ Whisper Droid is an Android app for transcribing audio files using the OpenAI sp
 - Format transcribed text using an LLM backend for improved readability
 - Settings screen with DataStore-backed persistence for API key, prompt, and model selection
 - Optional automatic LLM processing after each successful transcription
-- Inline prompt editing from the transcription view, with debounced autosave
+- Saved processing prompts with one active prompt for manual and automatic formatting
+- Local transcript history, exact-audio reuse, and a full-screen reader
 
 ## Quick start
 
@@ -55,7 +56,9 @@ history.
 - Select a transcription model in Settings and, optionally, a language on the transcription screen.
 - The status bar shows progress (analyzing, converting, uploading, transcribing, formatting).
 - Tap "Format Text" to send the transcript to the formatting engine; the UI switches to the Formatted tab after success.
-- Enable automatic processing in the Processing card to format completed transcripts without a second tap. Expand the card to edit the prompt; changes are saved automatically.
+- In the Processing card, choose or edit a saved prompt and optionally enable automatic processing.
+- Open raw or formatted text in the full-screen reader. History keeps transcript text on this device and lets you clear one entry or all entries. Audio is held temporarily during processing.
+- Sharing or selecting the exact same audio opens the saved result. To replace it, choose “Re-transcribe” in History and select the same audio again.
 - Use the Copy button to copy the currently visible text to the clipboard.
 
 ## Compatibility & notes
