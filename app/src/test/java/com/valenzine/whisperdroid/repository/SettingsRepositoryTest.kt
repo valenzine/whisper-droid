@@ -1,6 +1,8 @@
 package com.valenzine.whisperdroid.repository
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.preferencesOf
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.valenzine.whisperdroid.model.DEFAULT_LLM_PROMPT
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -29,7 +31,7 @@ class SettingsRepositoryTest {
             apiKey = "sk-test",
             llmPrompt = "Make concise paragraphs.",
             transcriptionModel = "gpt-4o-mini-transcribe",
-            llmModel = "gpt-5-nano",
+            llmModel = "gpt-6-luna",
             autoProcess = true
         )
 
@@ -46,7 +48,7 @@ class SettingsRepositoryTest {
                 apiKey = "sk-test",
                 llmPrompt = "Initial prompt",
                 transcriptionModel = "whisper-1",
-                llmModel = "gpt-5-nano"
+                llmModel = "gpt-6-luna"
             )
         )
 
@@ -55,7 +57,7 @@ class SettingsRepositoryTest {
 
         val settings = repository.settingsFlow.first()
         assertEquals("whisper-1", settings.transcriptionModel)
-        assertEquals("gpt-5-nano", settings.llmModel)
+        assertEquals("gpt-6-luna", settings.llmModel)
         assertEquals("Updated prompt", settings.llmPrompt)
         assertEquals(true, settings.autoProcess)
     }
@@ -69,6 +71,19 @@ class SettingsRepositoryTest {
 
         repository.saveLlmPrompt("")
         assertEquals(DEFAULT_LLM_PROMPT, repository.settingsFlow.first().llmPrompt)
+    }
+
+    @Test
+    fun savedNanoModelMigratesWithoutChangingOtherSettings() = runTest {
+        val model = stringPreferencesKey("llm_model")
+        val prompt = stringPreferencesKey("llm_prompt")
+        val legacy = preferencesOf(model to "gpt-5-nano", prompt to "Keep my wording.")
+
+        assertEquals(true, RetiredLlmModelMigration.shouldMigrate(legacy))
+        val migrated = RetiredLlmModelMigration.migrate(legacy)
+        assertEquals("gpt-5.6-luna", migrated[model])
+        assertEquals("Keep my wording.", migrated[prompt])
+        assertEquals(false, RetiredLlmModelMigration.shouldMigrate(migrated))
     }
 
     private fun TestScope.newRepository(): SettingsRepository {

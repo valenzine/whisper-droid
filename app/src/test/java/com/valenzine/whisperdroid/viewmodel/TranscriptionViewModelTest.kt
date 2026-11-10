@@ -82,13 +82,13 @@ class TranscriptionViewModelTest {
 
         assertTrue(viewModel.startTranscription { _, _ -> transcription.await() })
         runCurrent()
-        settings.update(prompt = "Use short paragraphs", llmModel = "gpt-5-nano")
+        settings.update(prompt = "Use short paragraphs", llmModel = "test-formatting-model")
         transcription.complete("raw dictation")
         advanceUntilIdle()
 
         assertEquals(1, gateway.formatCalls)
         assertEquals("Use short paragraphs", gateway.lastPrompt)
-        assertEquals("gpt-5-nano", gateway.lastLlmModel)
+        assertEquals("test-formatting-model", gateway.lastLlmModel)
         assertEquals("raw dictation", gateway.lastFormattedSource)
     }
 

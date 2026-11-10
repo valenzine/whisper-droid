@@ -15,6 +15,8 @@ data class LlmModelOption(
 )
 
 object ModelCatalog {
+    const val GPT_6_LUNA = "gpt-6-luna"
+
     val transcriptionModels = listOf(
         TranscriptionModelOption("gpt-transcribe", "GPT Transcribe (recommended)", remuxesOpusOgg = true),
         TranscriptionModelOption("gpt-4o-mini-transcribe", "GPT-4o mini Transcribe", remuxesOpusOgg = true),
@@ -23,8 +25,8 @@ object ModelCatalog {
     )
 
     val llmModels = listOf(
-        LlmModelOption("gpt-5.6-luna", "GPT-5.6 Luna (recommended)", "Cost-effective editing"),
-        LlmModelOption("gpt-5-nano", "GPT-5 nano (lowest cost)", "Lowest-cost editing")
+        LlmModelOption("gpt-5.6-luna", "GPT-5.6 Luna (default)", "Cost-effective editing"),
+        LlmModelOption(GPT_6_LUNA, "GPT-6 Luna", "Low-cost editing")
     )
 
     const val DEFAULT_TRANSCRIPTION_MODEL = "gpt-transcribe"
