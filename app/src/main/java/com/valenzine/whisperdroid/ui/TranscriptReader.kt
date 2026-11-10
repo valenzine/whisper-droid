@@ -2,6 +2,7 @@ package com.valenzine.whisperdroid.ui
 
 import android.content.ClipData
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -23,12 +24,49 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TranscriptReader(text: String?, formatted: Boolean, onBack: () -> Unit) {
     val title = if (formatted) "Formatted text" else "Raw transcription"
+    ReaderScaffold(title, text, onBack) { insets ->
+        if (text == null) {
+            Box(Modifier.fillMaxSize().padding(insets).padding(16.dp)) {
+                Text("This transcript is unavailable.")
+            }
+        } else {
+            Box(
+                Modifier.fillMaxSize().padding(insets).testTag("transcript-reader-scroll")
+                    .verticalScroll(rememberScrollState()).padding(16.dp)
+            ) {
+                SelectionContainer {
+                    Text(text, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun TranscriptReaderLoading(formatted: Boolean, onBack: () -> Unit) {
+    val title = if (formatted) "Formatted text" else "Raw transcription"
+    ReaderScaffold(title, null, onBack) { insets ->
+        Box(Modifier.fillMaxSize().padding(insets).padding(16.dp)) {
+            Text("Loading transcript…")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReaderScaffold(
+    title: String,
+    text: String?,
+    onBack: () -> Unit,
+    content: @Composable (PaddingValues) -> Unit
+) {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     Scaffold(
@@ -51,16 +89,6 @@ internal fun TranscriptReader(text: String?, formatted: Boolean, onBack: () -> U
             )
         }
     ) { insets ->
-        Box(
-            Modifier.fillMaxSize().padding(insets).verticalScroll(rememberScrollState()).padding(16.dp)
-        ) {
-            if (text == null) {
-                Text("This transcript is unavailable.")
-            } else {
-                SelectionContainer {
-                    Text(text, style = MaterialTheme.typography.bodyLarge)
-                }
-            }
-        }
+        content(insets)
     }
 }

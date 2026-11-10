@@ -1,9 +1,8 @@
 package com.valenzine.whisperdroid.ui
 
-import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -16,7 +15,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class TranscriptReaderTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createComposeRule()
 
     @Test
     fun rendersRawTranscription() {
@@ -44,4 +43,14 @@ class TranscriptReaderTest {
         composeRule.onNodeWithContentDescription("Back").performClick()
         composeRule.runOnIdle { assertTrue(returned) }
     }
+
+    @Test
+    fun rendersLoadingSeparatelyFromUnavailableText() {
+        composeRule.setContent {
+            MaterialTheme { TranscriptReaderLoading(formatted = false, onBack = {}) }
+        }
+
+        composeRule.onNodeWithText("Loading transcript…").assertIsDisplayed()
+    }
+
 }
