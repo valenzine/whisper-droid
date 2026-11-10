@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0] - 2026-11-10
+
+### Added
+- On-device history for raw and formatted transcripts, with individual deletion and Clear all.
+- Exact-audio duplicate detection that opens the saved transcript without another API request. Re-transcribe can replace the saved result when you supply the same audio.
+- A full-screen reader for raw and formatted text, with selection and copying.
+- Named processing prompts and an active prompt for manual and automatic formatting. Existing custom prompts are preserved when upgrading.
+
+### Fixed
+- Audio shared from other apps opens in Whisper Droid’s own task. You can switch back to the sender while processing continues, and reopen completed results after relaunch.
+
 ## [0.2.1] - 2026-11-10
 
 ### Added
