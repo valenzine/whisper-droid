@@ -1,8 +1,11 @@
 package com.valenzine.whisperdroid.ui
 
+import android.text.style.UnderlineSpan
+import android.widget.TextView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,16 +22,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import android.text.style.UnderlineSpan
-import android.widget.TextView
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
 import io.noties.markwon.MarkwonSpansFactory
 import io.noties.markwon.core.CorePlugin
+import io.noties.markwon.core.MarkwonTheme
 import org.commonmark.node.Link
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,10 +45,27 @@ internal fun TranscriptReader(text: String?, formatted: Boolean, onBack: () -> U
             }
         } else {
             val context = LocalContext.current
-            val markwon = remember(context) {
+            val density = LocalDensity.current
+            val markerColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+            val dividerColor = MaterialTheme.colorScheme.outlineVariant.toArgb()
+            val lineSpacing = with(density) { 3.dp.toPx() }
+            val markwon = remember(context, density, markerColor, dividerColor) {
                 Markwon.builderNoCore(context)
                     .usePlugin(CorePlugin.create().hasExplicitMovementMethod(true))
                     .usePlugin(object : AbstractMarkwonPlugin() {
+                        override fun configureTheme(builder: MarkwonTheme.Builder) {
+                            with(density) {
+                                builder
+                                    .bulletWidth(5.dp.roundToPx())
+                                    .bulletListItemStrokeWidth(1.dp.roundToPx())
+                                    .listItemColor(markerColor)
+                                    .blockQuoteWidth(2.dp.roundToPx())
+                                    .blockQuoteColor(dividerColor)
+                                    .headingBreakColor(dividerColor)
+                                    .headingTextSizeMultipliers(floatArrayOf(1.5f, 1.28f, 1.12f, 1f, 1f, 1f))
+                            }
+                        }
+
                         override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
                             builder.setFactory(Link::class.java) { _, _ -> UnderlineSpan() }
                         }
@@ -66,12 +86,14 @@ internal fun TranscriptReader(text: String?, formatted: Boolean, onBack: () -> U
                     },
                     update = { view ->
                         view.setTextColor(textColor)
-                        if (view.tag != text) {
+                        view.setLineSpacing(lineSpacing, 1f)
+                        val render = markwon to text
+                        if (view.tag != render) {
                             markwon.setMarkdown(view, text)
-                            view.tag = text
+                            view.tag = render
                         }
                     },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
