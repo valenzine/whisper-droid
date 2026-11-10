@@ -2,6 +2,7 @@ package com.valenzine.whisperdroid.history
 
 import android.content.Context
 import androidx.room.Dao
+import androidx.room.ColumnInfo
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.Index
@@ -22,8 +23,8 @@ data class TranscriptEntry(
     val displayName: String,
     val rawText: String,
     val formattedText: String = "",
-    val summary: String = "",
-    val sourceOrigin: String = "Audio",
+    @ColumnInfo(defaultValue = "''") val summary: String = "",
+    @ColumnInfo(defaultValue = "'Audio'") val sourceOrigin: String = "Audio",
     val createdAt: Long,
     val updatedAt: Long
 )
@@ -48,7 +49,7 @@ interface TranscriptHistoryDao {
     @Query("UPDATE TranscriptEntry SET formattedText = :formattedText, summary = :summary, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateFormattedText(id: Long, formattedText: String, summary: String, updatedAt: Long)
 
-    @Query("UPDATE TranscriptEntry SET displayName = :displayName, rawText = :rawText, formattedText = '', updatedAt = :updatedAt WHERE id = :id")
+    @Query("UPDATE TranscriptEntry SET displayName = :displayName, rawText = :rawText, formattedText = '', summary = '', updatedAt = :updatedAt WHERE id = :id")
     suspend fun replaceTranscription(id: Long, displayName: String, rawText: String, updatedAt: Long)
 
     @Query("DELETE FROM TranscriptEntry WHERE id = :id")
@@ -70,9 +71,9 @@ abstract class TranscriptHistoryDatabase : RoomDatabase() {
         ).addMigrations(MIGRATION_1_2).build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE TranscriptEntry ADD COLUMN summary TEXT NOT NULL DEFAULT ''")
-                database.execSQL("ALTER TABLE TranscriptEntry ADD COLUMN sourceOrigin TEXT NOT NULL DEFAULT 'Audio'")
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE TranscriptEntry ADD COLUMN summary TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE TranscriptEntry ADD COLUMN sourceOrigin TEXT NOT NULL DEFAULT 'Audio'")
             }
         }
     }
@@ -87,15 +88,14 @@ class TranscriptHistoryRepository(private val dao: TranscriptHistoryDao) {
 
     suspend fun find(fingerprint: String) = dao.findByFingerprint(fingerprint)
 
-    suspend fun saveRaw(fingerprint: String, displayName: String, rawText: String, sourceOrigin: String): TranscriptEntry {
-        val now = System.currentTimeMillis()
+    suspend fun saveRaw(fingerprint: String, displayName: String, rawText: String, sourceOrigin: String, importedAt: Long): TranscriptEntry {
         val entry = TranscriptEntry(
             audioFingerprint = fingerprint,
             displayName = displayName,
             rawText = rawText,
             sourceOrigin = sourceOrigin,
-            createdAt = now,
-            updatedAt = now
+            createdAt = importedAt,
+            updatedAt = importedAt
         )
         return entry.copy(id = dao.insert(entry))
     }

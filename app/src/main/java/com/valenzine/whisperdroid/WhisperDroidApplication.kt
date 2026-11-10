@@ -28,9 +28,9 @@ class WhisperDroidApplication : Application() {
         val startupCleanup = cleanup
         AudioSession(
             scope = processScope,
-            stage = { uri, sourceOrigin ->
+            stage = { uri, sourceOrigin, importedAt ->
                 startupCleanup.await()
-                repository.stageUri(uri, sourceOrigin)
+                repository.stageUri(uri, sourceOrigin, importedAt)
             },
             process = transcription::processStagedAudio,
             showError = transcription::showAudioError

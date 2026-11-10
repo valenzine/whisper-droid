@@ -15,7 +15,7 @@ import kotlinx.coroutines.sync.Semaphore
 /** Reserves one running and one waiting audio slot, including while a share is being copied. */
 internal class AudioSession(
     private val scope: CoroutineScope,
-    private val stage: suspend (Uri, String) -> StagedAudio,
+    private val stage: suspend (Uri, String, Long) -> StagedAudio,
     private val process: suspend (StagedAudio, String?, String?) -> Unit,
     private val showError: (Exception) -> Unit
 ) {
@@ -58,7 +58,7 @@ internal class AudioSession(
         val copyFinished = CompletableDeferred<Unit>()
         val staged = scope.async(start = CoroutineStart.LAZY) {
             try {
-                stage(uri, sourceOrigin)
+                stage(uri, sourceOrigin, System.currentTimeMillis())
             } finally {
                 copyFinished.complete(Unit)
             }

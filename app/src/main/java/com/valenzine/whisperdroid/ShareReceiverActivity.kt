@@ -61,11 +61,12 @@ class ShareReceiverActivity : ComponentActivity() {
     }
 
     private fun sourceOrigin(uri: Uri): String {
-        val caller = if (android.os.Build.VERSION.SDK_INT >= 35) callingPackage else null
+        val caller = if (android.os.Build.VERSION.SDK_INT >= 35) initialCaller.`package` else callingPackage
+        val authority = uri.authority.orEmpty()
         return when {
-            caller in setOf("org.telegram.messenger", "org.telegram.messenger.web") || uri.authority.orEmpty().contains("telegram", true) -> "Telegram"
-            caller in setOf("com.whatsapp", "com.whatsapp.w4b") || uri.authority.orEmpty().contains("whatsapp", true) -> "WhatsApp"
-            uri.authority.orEmpty().contains("documents", true) || uri.authority.orEmpty().contains("downloads", true) -> "Files"
+            caller in setOf("org.telegram.messenger", "org.telegram.messenger.web") || authority.startsWith("org.telegram") -> "Telegram"
+            caller in setOf("com.whatsapp", "com.whatsapp.w4b") || authority.startsWith("com.whatsapp") -> "WhatsApp"
+            authority.startsWith("com.android.providers.media.documents") || authority.startsWith("com.android.providers.downloads.documents") -> "Files"
             else -> "Shared audio"
         }
     }

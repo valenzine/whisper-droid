@@ -33,7 +33,7 @@ class TranscriptHistoryRepositoryTest {
 
     @Test
     fun rawTranscriptPersistsAndCanBeFoundByFingerprint() = runBlocking {
-        val saved = repository.saveRaw("fingerprint", "dictation.m4a", "raw transcript", "Audio")
+        val saved = repository.saveRaw("fingerprint", "dictation.m4a", "raw transcript", "Audio", 1L)
 
         val found = repository.find("fingerprint")
 
@@ -44,7 +44,7 @@ class TranscriptHistoryRepositoryTest {
 
     @Test
     fun formattingUpdatesTheExistingHistoryEntry() = runBlocking {
-        val saved = repository.saveRaw("fingerprint", "dictation.m4a", "raw transcript", "Audio")
+        val saved = repository.saveRaw("fingerprint", "dictation.m4a", "raw transcript", "Audio", 1L)
 
         repository.saveFormatted(saved.id, "formatted transcript", "A formatted transcript.")
 
@@ -56,7 +56,7 @@ class TranscriptHistoryRepositoryTest {
 
     @Test
     fun deletingAnEntryRemovesItsFingerprintMatch() = runBlocking {
-        val saved = repository.saveRaw("fingerprint", "dictation.m4a", "raw transcript", "Audio")
+        val saved = repository.saveRaw("fingerprint", "dictation.m4a", "raw transcript", "Audio", 1L)
 
         repository.delete(saved.id)
 

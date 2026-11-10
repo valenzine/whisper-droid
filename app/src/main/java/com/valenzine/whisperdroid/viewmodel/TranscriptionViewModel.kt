@@ -151,7 +151,7 @@ class TranscriptionViewModel(
                 }
             }
             val entryId = if (saved == null) {
-                historyRepository?.saveRaw(audio.sha256, audio.displayName, result, audio.sourceOrigin)?.id
+                historyRepository?.saveRaw(audio.sha256, audio.displayName, result, audio.sourceOrigin, audio.importedAt)?.id
             } else {
                 historyRepository.replaceTranscription(saved.id, audio.displayName, result)
                 saved.id

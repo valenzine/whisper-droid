@@ -21,12 +21,14 @@ import java.io.FileOutputStream
 import java.util.UUID
 import java.security.MessageDigest
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 data class StagedAudio(
     val file: File,
     val displayName: String,
     val sha256: String,
-    val sourceOrigin: String = "Audio"
+    val sourceOrigin: String = "Audio",
+    val importedAt: Long = System.currentTimeMillis()
 )
 
 data class FormattedTranscript(val text: String, val summary: String)
@@ -219,7 +221,7 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         transcribeFile(stagedAudio.file, apiKey, model, language, onProgress)
     }
 
-    internal suspend fun stageUri(uri: Uri, sourceOrigin: String = "Audio"): StagedAudio = withContext(Dispatchers.IO) {
+    internal suspend fun stageUri(uri: Uri, sourceOrigin: String = "Audio", importedAt: Long = System.currentTimeMillis()): StagedAudio = withContext(Dispatchers.IO) {
         val metadata = context.contentResolver.query(
             uri,
             arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
@@ -264,7 +266,8 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
                 file = temporary,
                 displayName = displayName,
                 sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) },
-                sourceOrigin = sourceOrigin
+                sourceOrigin = sourceOrigin,
+                importedAt = importedAt
             )
         } catch (error: Throwable) {
             temporary.delete()
@@ -424,9 +427,18 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
             authorization = "Bearer $apiKey",
             request = request
         )
-        val payload = Gson().fromJson(response.choices.first().message.content, FormattedTranscript::class.java)
-        require(payload.text.isNotBlank()) { "Formatting response did not include text" }
-        return payload.copy(summary = payload.summary.trim())
+        val payload = runCatching {
+            Gson().fromJson<Map<String, String>>(
+                response.choices.first().message.content,
+                object : TypeToken<Map<String, String>>() {}.type
+            )
+        }.getOrElse { throw IllegalStateException("Formatting response could not be read.") }
+        val formattedText = payload["text"]?.replace("\r\n", "\n")?.trim()
+            ?: throw IllegalStateException("Formatting response did not include text.")
+        require(formattedText.isNotBlank()) { "Formatting response did not include text." }
+        val summary = payload["summary"]?.replace(Regex("\\s+"), " ")?.trim()
+            ?: throw IllegalStateException("Formatting response did not include a summary.")
+        return FormattedTranscript(formattedText, summary)
     }
     
     private companion object {

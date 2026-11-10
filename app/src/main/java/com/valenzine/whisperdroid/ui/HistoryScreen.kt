@@ -47,7 +47,10 @@ import com.valenzine.whisperdroid.WhisperDroidApplication
 import com.valenzine.whisperdroid.history.TranscriptEntry
 import kotlinx.coroutines.launch
 import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
+import android.text.format.DateFormat as AndroidDateFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -160,7 +163,7 @@ private fun HistoryEntryCard(
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    entry.displayName,
+                    "${entry.sourceOrigin} · ${historyTimestamp(entry.createdAt)}",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
@@ -168,7 +171,7 @@ private fun HistoryEntryCard(
                 )
                 Box {
                     IconButton(onClick = { moreExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More actions for ${entry.displayName}")
+                        Icon(Icons.Default.MoreVert, contentDescription = "More actions for ${entry.sourceOrigin} at ${historyTimestamp(entry.createdAt)}")
                     }
                     DropdownMenu(
                         expanded = moreExpanded,
@@ -201,7 +204,7 @@ private fun HistoryEntryCard(
                 )
             }
             Text(
-                "${entry.sourceOrigin} · ${DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(entry.createdAt))}",
+                entry.displayName,
                 style = MaterialTheme.typography.bodySmall
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -213,4 +216,9 @@ private fun HistoryEntryCard(
             }
         }
     }
+}
+
+private fun historyTimestamp(timestamp: Long): String {
+    val pattern = AndroidDateFormat.getBestDateTimePattern(Locale.getDefault(), "MMM d jm")
+    return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(timestamp))
 }
