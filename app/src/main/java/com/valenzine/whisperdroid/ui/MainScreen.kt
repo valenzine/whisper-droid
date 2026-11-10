@@ -34,7 +34,11 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun MainScreen(navController: NavController, app: WhisperDroidApplication) {
+internal fun MainScreen(
+    navController: NavController,
+    app: WhisperDroidApplication,
+    openReader: (id: Long, formatted: Boolean) -> Unit
+) {
     val viewModel = app.transcription
     val audioSession = app.audioSession
     val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(app.settings))
@@ -79,6 +83,7 @@ internal fun MainScreen(navController: NavController, app: WhisperDroidApplicati
     }
 
     var activeTabIndex by rememberSaveable { mutableIntStateOf(0) }
+    var lastDisplayedResult by rememberSaveable { mutableStateOf<String?>(null) }
     val tabs = listOf("Transcription", "Formatted")
     var transcriptionHeight by remember { mutableStateOf(150.dp) }
     var formattedHeight by remember { mutableStateOf(150.dp) }
@@ -97,8 +102,12 @@ internal fun MainScreen(navController: NavController, app: WhisperDroidApplicati
     }
     LaunchedEffect(screenState.phase) {
         val phase = screenState.phase
-        if (phase is TranscriptionUiState.Success && phase.formattedText != null) {
-            activeTabIndex = 1
+        if (phase is TranscriptionUiState.Success) {
+            val result = "${screenState.historyEntryId}:${phase.hashCode()}"
+            if (lastDisplayedResult != result) {
+                activeTabIndex = if (phase.formattedText == null) 0 else 1
+                lastDisplayedResult = result
+            }
         }
     }
 
@@ -226,6 +235,12 @@ internal fun MainScreen(navController: NavController, app: WhisperDroidApplicati
                                 }) { Text("Re-transcribe") }
                                 TextButton(onClick = { viewModel.deleteHistoryEntry(entry.id) }, enabled = !screenState.isBusy) { Text("Clear") }
                             }
+                            Row {
+                                TextButton(onClick = { openReader(entry.id, false) }) { Text("Read raw") }
+                                if (entry.formattedText.isNotBlank()) {
+                                    TextButton(onClick = { openReader(entry.id, true) }) { Text("Read formatted") }
+                                }
+                            }
                         }
                     }
                 }
@@ -241,6 +256,13 @@ internal fun MainScreen(navController: NavController, app: WhisperDroidApplicati
                 }
             }
 
+            val currentEntry = screenState.historyEntryId
+            val selectedText = if (activeTabIndex == 0) transcription else formattedText
+            if (currentEntry != null && selectedText.isNotBlank()) {
+                TextButton(onClick = { openReader(currentEntry, activeTabIndex == 1) }) {
+                    Text("Full screen")
+                }
+            }
             Spacer(modifier = Modifier.height(8.dp))
 
             if (activeTabIndex == 0) {
@@ -300,7 +322,6 @@ internal fun MainScreen(navController: NavController, app: WhisperDroidApplicati
 
             val clipboardManager = LocalClipboardManager.current
             val coroutineScope = rememberCoroutineScope()
-            val activeText = if (activeTabIndex == 0) transcription else formattedText
 
             Row {
                 Button(onClick = {
@@ -312,9 +333,9 @@ internal fun MainScreen(navController: NavController, app: WhisperDroidApplicati
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Button(onClick = {
-                    clipboardManager.setText(AnnotatedString(activeText))
+                    clipboardManager.setText(AnnotatedString(selectedText))
                     coroutineScope.launch { snackbarHostState.showSnackbar("Copied to clipboard") }
-                }, enabled = activeText.isNotBlank()) {
+                }, enabled = selectedText.isNotBlank()) {
                     Text("Copy")
                 }
             }
