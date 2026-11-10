@@ -26,13 +26,14 @@ import android.net.Uri
 import androidx.compose.ui.focus.onFocusChanged
 import com.valenzine.whisperdroid.model.DEFAULT_LLM_PROMPT
 import com.valenzine.whisperdroid.repository.SettingsRepository
+import com.valenzine.whisperdroid.history.TranscriptHistoryDatabase
+import com.valenzine.whisperdroid.history.TranscriptHistoryRepository
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModelFactory
 import com.valenzine.whisperdroid.viewmodel.TranscriptionUiState
 import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModel
 import com.valenzine.whisperdroid.viewmodel.TranscriptionViewModelFactory
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -46,10 +47,12 @@ fun MainScreen(
     val context = LocalContext.current
     val repository = remember { com.valenzine.whisperdroid.repository.TranscriptionRepository(context) }
     val settingsRepository = remember { SettingsRepository(context) }
-    val viewModel: TranscriptionViewModel = viewModel(factory = TranscriptionViewModelFactory(repository, settingsRepository))
+    val historyRepository = remember { TranscriptHistoryRepository(TranscriptHistoryDatabase.create(context).transcriptHistoryDao()) }
+    val viewModel: TranscriptionViewModel = viewModel(factory = TranscriptionViewModelFactory(repository, settingsRepository, historyRepository))
     val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(settingsRepository))
     val screenState by viewModel.screenState.collectAsState()
     val appSettings by settingsViewModel.settings.collectAsState()
+    val historyEntries by historyRepository.entries.collectAsState(initial = emptyList())
     val transcription = screenState.transcription
     val formattedText = screenState.formattedText
     val uiState = screenState.phase
@@ -69,14 +72,15 @@ fun MainScreen(
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { viewModel.transcribeUri(it, languageCodes[selectedLanguage]) }
     }
+    var retranscribeEntry by remember { mutableStateOf<com.valenzine.whisperdroid.history.TranscriptEntry?>(null) }
+    val retranscribeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        retranscribeEntry?.let { entry -> uri?.let { viewModel.retranscribeUri(entry, it, languageCodes[selectedLanguage]) } }
+        retranscribeEntry = null
+    }
 
     LaunchedEffect(sharedAudioUri, screenState.isBusy, appSettings.apiKey) {
         sharedAudioUri?.let { uri ->
-            if (settingsRepository.settingsFlow.first().apiKey.isBlank()) {
-                snackbarHostState.showSnackbar("Add an OpenAI API key in Settings before transcribing.")
-            } else {
-                viewModel.transcribeUri(uri, languageCodes[selectedLanguage], onSharedAudioConsumed)
-            }
+            viewModel.transcribeUri(uri, languageCodes[selectedLanguage], onSharedAudioConsumed)
         }
     }
 
@@ -88,6 +92,7 @@ fun MainScreen(
     var promptExpanded by rememberSaveable { mutableStateOf(false) }
     var promptDraft by rememberSaveable { mutableStateOf(appSettings.llmPrompt) }
     var promptFocused by remember { mutableStateOf(false) }
+    var clearHistoryConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(appSettings.llmPrompt) {
         if (!promptFocused) promptDraft = appSettings.llmPrompt
@@ -202,6 +207,30 @@ fun MainScreen(
                         )
                         TextButton(onClick = { promptDraft = DEFAULT_LLM_PROMPT }) {
                             Text("Reset to default prompt")
+                        }
+                    }
+                }
+            }
+
+            if (historyEntries.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Text("History", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { clearHistoryConfirmation = true }) { Text("Clear all") }
+                        }
+                        historyEntries.forEach { entry ->
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                TextButton(onClick = { viewModel.showHistoryEntry(entry) }, modifier = Modifier.weight(1f)) {
+                                    Text(entry.displayName, maxLines = 1)
+                                }
+                                TextButton(onClick = {
+                                    retranscribeEntry = entry
+                                    retranscribeLauncher.launch("audio/*")
+                                }) { Text("Re-transcribe") }
+                                TextButton(onClick = { viewModel.deleteHistoryEntry(entry.id) }) { Text("Clear") }
+                            }
                         }
                     }
                 }
@@ -372,6 +401,20 @@ fun MainScreen(
                 SnackbarHost(hostState = snackbarHostState)
             }
         }
+    }
+    if (clearHistoryConfirmation) {
+        AlertDialog(
+            onDismissRequest = { clearHistoryConfirmation = false },
+            title = { Text("Clear transcription history?") },
+            text = { Text("This removes all saved transcriptions and their duplicate detection records.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearHistory()
+                    clearHistoryConfirmation = false
+                }) { Text("Clear all") }
+            },
+            dismissButton = { TextButton(onClick = { clearHistoryConfirmation = false }) { Text("Cancel") } }
+        )
     }
 }
 

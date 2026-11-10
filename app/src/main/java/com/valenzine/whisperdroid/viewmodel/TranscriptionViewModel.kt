@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.valenzine.whisperdroid.repository.SettingsGateway
 import com.valenzine.whisperdroid.repository.TranscriptionGateway
+import com.valenzine.whisperdroid.history.TranscriptHistoryRepository
+import com.valenzine.whisperdroid.history.TranscriptEntry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -34,14 +36,43 @@ sealed interface TranscriptionUiState {
 
 class TranscriptionViewModel(
     private val repository: TranscriptionGateway,
-    private val settingsRepository: SettingsGateway
+    private val settingsRepository: SettingsGateway,
+    private val historyRepository: TranscriptHistoryRepository? = null
 ) : ViewModel() {
     private val _screenState = MutableStateFlow(TranscriptionScreenState())
     val screenState: StateFlow<TranscriptionScreenState> = _screenState
     private val admissionLock = Any()
+    private var currentHistoryEntryId: Long? = null
 
     fun resetState() {
         _screenState.value = _screenState.value.copy(phase = TranscriptionUiState.Idle, error = null, errorDetails = null)
+    }
+
+    fun showHistoryEntry(entry: TranscriptEntry) {
+        currentHistoryEntryId = entry.id
+        _screenState.value = _screenState.value.copy(
+            transcription = entry.rawText,
+            formattedText = entry.formattedText,
+            selectedFileName = entry.displayName,
+            phase = TranscriptionUiState.Success(entry.rawText, entry.formattedText.takeIf(String::isNotBlank)),
+            error = null,
+            errorDetails = null
+        )
+    }
+
+    fun deleteHistoryEntry(id: Long) = viewModelScope.launch {
+        historyRepository?.delete(id)
+        if (currentHistoryEntryId == id) clearDisplayedEntry()
+    }
+
+    fun clearHistory() = viewModelScope.launch {
+        historyRepository?.clear()
+        clearDisplayedEntry()
+    }
+
+    private fun clearDisplayedEntry() {
+        currentHistoryEntryId = null
+        _screenState.value = TranscriptionScreenState()
     }
 
     /** Atomically accepts one URI and consumes its event before creating the work coroutine. */
@@ -49,10 +80,105 @@ class TranscriptionViewModel(
         uri: Uri,
         language: String? = null,
         onAccepted: () -> Unit = {}
-    ): Boolean {
-        return startTranscription(uri.lastPathSegment, onAccepted) { settings, onProgress ->
-            repository.transcribeUri(uri, settings.apiKey, settings.transcriptionModel, language, onProgress)
+    ): Boolean = synchronized(admissionLock) {
+        if (_screenState.value.isBusy) return@synchronized false
+        val fileName = uri.lastPathSegment ?: "Audio file"
+        _screenState.value = _screenState.value.copy(selectedFileName = fileName, phase = TranscriptionUiState.Loading, error = null, errorDetails = null)
+        onAccepted()
+        viewModelScope.launch {
+            var stagedAudio: com.valenzine.whisperdroid.repository.StagedAudio? = null
+            try {
+                stagedAudio = repository.stageUri(uri)
+                historyRepository?.find(stagedAudio.sha256)?.let { entry ->
+                    currentHistoryEntryId = entry.id
+                    _screenState.value = _screenState.value.copy(
+                        transcription = entry.rawText,
+                        formattedText = entry.formattedText,
+                        selectedFileName = entry.displayName,
+                        phase = TranscriptionUiState.Success(entry.rawText, entry.formattedText.takeIf(String::isNotBlank)),
+                        error = null,
+                        errorDetails = null
+                    )
+                    return@launch
+                }
+                val settings = settingsRepository.settingsFlow.first()
+                if (settings.apiKey.isBlank()) {
+                    setError("Add an OpenAI API key in Settings before transcribing.")
+                    return@launch
+                }
+                val result = repository.transcribeStaged(stagedAudio, settings.apiKey, settings.transcriptionModel, language) { progressMessage ->
+                    val selectedName = _screenState.value.selectedFileName ?: "Audio file"
+                    when {
+                        progressMessage.contains("Converting", ignoreCase = true) -> setPhase(TranscriptionUiState.TranscodingFile(selectedName, selectedName.substringAfterLast('.', "audio").uppercase(), "WebM"))
+                        progressMessage.contains("Uploading", ignoreCase = true) -> setPhase(TranscriptionUiState.UploadingFile(selectedName, progressMessage.substringAfter("to ").substringBefore("...")))
+                        else -> setPhase(TranscriptionUiState.Loading)
+                    }
+                }
+                currentHistoryEntryId = historyRepository?.saveRaw(stagedAudio.sha256, stagedAudio.displayName, result)?.id
+                _screenState.value = _screenState.value.copy(transcription = result, formattedText = "", phase = TranscriptionUiState.Success(result), error = null, errorDetails = null)
+                if (settingsRepository.settingsFlow.first().autoProcess && result.isNotBlank()) {
+                    setPhase(TranscriptionUiState.FormattingText)
+                    formatTextInternal(result)
+                }
+            } catch (e: Exception) {
+                setError(messageFor(e, "Transcription failed"), e.message)
+            } finally {
+                stagedAudio?.file?.delete()
+            }
         }
+        true
+    }
+
+    fun retranscribeUri(entry: TranscriptEntry, uri: Uri, language: String? = null): Boolean = synchronized(admissionLock) {
+        if (_screenState.value.isBusy) return@synchronized false
+        _screenState.value = _screenState.value.copy(
+            selectedFileName = entry.displayName,
+            phase = TranscriptionUiState.Loading,
+            error = null,
+            errorDetails = null
+        )
+        viewModelScope.launch {
+            var stagedAudio: com.valenzine.whisperdroid.repository.StagedAudio? = null
+            try {
+                stagedAudio = repository.stageUri(uri)
+                if (stagedAudio.sha256 != entry.audioFingerprint) {
+                    setError("Selected audio does not match this history entry.")
+                    return@launch
+                }
+                val settings = settingsRepository.settingsFlow.first()
+                if (settings.apiKey.isBlank()) {
+                    setError("Add an OpenAI API key in Settings before transcribing.")
+                    return@launch
+                }
+                val result = repository.transcribeStaged(stagedAudio, settings.apiKey, settings.transcriptionModel, language) { progressMessage ->
+                    val selectedName = entry.displayName
+                    when {
+                        progressMessage.contains("Converting", ignoreCase = true) -> setPhase(TranscriptionUiState.TranscodingFile(selectedName, selectedName.substringAfterLast('.', "audio").uppercase(), "WebM"))
+                        progressMessage.contains("Uploading", ignoreCase = true) -> setPhase(TranscriptionUiState.UploadingFile(selectedName, progressMessage.substringAfter("to ").substringBefore("...")))
+                        else -> setPhase(TranscriptionUiState.Loading)
+                    }
+                }
+                historyRepository?.replaceTranscription(entry.id, stagedAudio.displayName, result)
+                currentHistoryEntryId = entry.id
+                _screenState.value = _screenState.value.copy(
+                    transcription = result,
+                    formattedText = "",
+                    selectedFileName = stagedAudio.displayName,
+                    phase = TranscriptionUiState.Success(result),
+                    error = null,
+                    errorDetails = null
+                )
+                if (settingsRepository.settingsFlow.first().autoProcess && result.isNotBlank()) {
+                    setPhase(TranscriptionUiState.FormattingText)
+                    formatTextInternal(result)
+                }
+            } catch (e: Exception) {
+                setError(messageFor(e, "Transcription failed"), e.message)
+            } finally {
+                stagedAudio?.file?.delete()
+            }
+        }
+        true
     }
 
     internal fun startTranscription(
@@ -139,6 +265,7 @@ class TranscriptionViewModel(
                 error = null,
                 errorDetails = null
             )
+            currentHistoryEntryId?.let { historyRepository?.saveFormatted(it, result) }
         } catch (e: Exception) {
             setError(e.message ?: "Formatting failed", e.message)
         }
