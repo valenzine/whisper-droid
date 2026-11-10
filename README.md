@@ -8,12 +8,13 @@ Whisper Droid is an Android app for transcribing audio files using the OpenAI sp
 - Automatic language detection or manual language selection (Automatic, English, Spanish, Italian)
 - Support for current and compatible transcription models: `gpt-transcribe` (default), `gpt-4o-mini-transcribe`, `gpt-4o-transcribe`, and `whisper-1`
 - Automatic remux/conversion of Opus/OGG to WebM when required by the chosen model
-- Resizable, tabbed text panes for raw transcription and formatted output (drag the handle to resize)
+- A resizable transcript card with Transcript and Edited tabs and inline Markdown
 - Copy transcription or formatted text to the clipboard
 - Format transcribed text using an LLM backend for improved readability
 - Settings screen with DataStore-backed persistence for API key, prompt, and model selection
 - Optional automatic LLM processing after each successful transcription
-- Inline prompt editing from the transcription view, with debounced autosave
+- Saved editing prompts and one saved edit per prompt
+- Local transcript history, exact-audio reuse, and a full-screen Markdown reader
 
 ## Quick start
 
@@ -51,12 +52,12 @@ history.
 
 ## Usage
 
-- Tap "Select Audio File" to choose an audio file from your device.
-- Select a transcription model in Settings and, optionally, a language on the transcription screen.
-- The status bar shows progress (analyzing, converting, uploading, transcribing, formatting).
-- Tap "Format Text" to send the transcript to the formatting engine; the UI switches to the Formatted tab after success.
-- Enable automatic processing in the Processing card to format completed transcripts without a second tap. Expand the card to edit the prompt; changes are saved automatically.
-- Use the Copy button to copy the currently visible text to the clipboard.
+- Tap the audio-file icon to choose a file, or share audio to Whisper Droid from another app.
+- Select a transcription model in Settings and a language on the main screen.
+- Tap a prompt pill to open its saved edit. Use **Edit transcript** to create an edit or **Run again** to refresh it. Manage prompts and automatic editing in Settings.
+- Use Copy or Expand for the selected Transcript or Edited tab. Drag the strip under the card to resize the text area.
+- History keeps transcript text and edits on this device. Open **Edits** to view, copy, delete, or rerun a prompt using the saved transcript. Audio is held temporarily during processing.
+- Selecting or sharing the exact same audio opens its saved transcript. **Re-transcribe** is available when the app can still reopen the original file from its picker.
 
 ## Compatibility & notes
 
