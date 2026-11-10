@@ -25,21 +25,22 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun settingsSavePreservesTheActivePromptAndPromptList() = runTest {
+    fun settingsSavePreservesPromptsAndAutomaticFormatting() = runTest {
         val repository = newRepository()
         repository.createPrompt("Meeting notes", "Make concise paragraphs.")
+        repository.saveAutoProcess(true)
         val promptState = repository.settingsFlow.first()
 
         repository.saveSettings(
             AppSettings(
-            apiKey = "sk-test",
-            transcriptionModel = "gpt-4o-mini-transcribe",
-            llmModel = "gpt-6-luna",
-            autoProcess = true
+                apiKey = "sk-test",
+                transcriptionModel = "gpt-4o-mini-transcribe",
+                llmModel = "gpt-6-luna"
             )
         )
 
         val actual = repository.settingsFlow.first()
+        assertEquals(true, actual.autoProcess)
         assertEquals(promptState.prompts, actual.prompts)
         assertEquals(promptState.activePromptId, actual.activePromptId)
         assertEquals("Make concise paragraphs.", actual.llmPrompt)

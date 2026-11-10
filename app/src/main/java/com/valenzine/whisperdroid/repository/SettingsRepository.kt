@@ -138,14 +138,13 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Settin
         )
     }
 
-    /** Persist the Settings form in a single transaction so requests never see a partial form save. */
+    /** Save the API key and models together. Prompt and auto-format controls persist independently. */
     suspend fun saveSettings(settings: AppSettings) {
         dataStore.edit {
             it[apiKey] = settings.apiKey
             it[transcriptionModel] = settings.transcriptionModel
             it[llmModelKey] = settings.llmModel.takeUnless { model -> model == RETIRED_LLM_MODEL }
                 ?: ModelCatalog.DEFAULT_LLM_MODEL
-            it[autoProcess] = settings.autoProcess
         }
     }
 

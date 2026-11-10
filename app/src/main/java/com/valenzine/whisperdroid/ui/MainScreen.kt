@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -77,16 +78,18 @@ internal fun MainScreen(
 
     var activeTabIndex by rememberSaveable { mutableIntStateOf(0) }
     var lastDisplayedResult by rememberSaveable { mutableStateOf<String?>(null) }
-    val tabs = listOf("Transcription", "Formatted")
     var transcriptionHeight by remember { mutableStateOf(150.dp) }
     var formattedHeight by remember { mutableStateOf(150.dp) }
     val density = androidx.compose.ui.platform.LocalDensity.current
-    LaunchedEffect(screenState.phase) {
-        val phase = screenState.phase
-        if (phase is TranscriptionUiState.Success) {
-            val result = "${screenState.historyEntryId}:${phase.hashCode()}"
+    val currentEntry = screenState.historyEntryId
+    val formattingCurrent = uiState is TranscriptionUiState.FormattingText &&
+        (screenState.formattingEntryId == null || screenState.formattingEntryId == currentEntry)
+    LaunchedEffect(uiState, currentEntry) {
+        if (formattingCurrent && formattedText.isBlank()) activeTabIndex = 0
+        if (uiState is TranscriptionUiState.Success) {
+            val result = "${screenState.historyEntryId}:${uiState.hashCode()}"
             if (lastDisplayedResult != result) {
-                activeTabIndex = if (phase.formattedText == null) 0 else 1
+                activeTabIndex = if (uiState.formattedText == null) 0 else 1
                 lastDisplayedResult = result
             }
         }
@@ -179,98 +182,69 @@ internal fun MainScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Processing", style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                if (appSettings.autoProcess) "Automatic formatting is on" else "Format manually when ready",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        Switch(checked = appSettings.autoProcess, onCheckedChange = settingsViewModel::setAutoProcess)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                        appSettings.prompts.forEach { prompt ->
-                            FilterChip(
-                                selected = prompt.id == appSettings.activePromptId,
-                                onClick = { settingsViewModel.selectPrompt(prompt.id) },
-                                label = {
-                                    Text(
-                                        prompt.name,
-                                        modifier = Modifier.widthIn(max = 180.dp),
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
-                                },
-                                shape = CircleShape,
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                        }
-                    }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Prompt", style = MaterialTheme.typography.labelLarge)
+                appSettings.prompts.forEach { prompt ->
+                    FilterChip(
+                        selected = prompt.id == appSettings.activePromptId,
+                        onClick = { settingsViewModel.selectPrompt(prompt.id) },
+                        label = { Text(prompt.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        shape = CircleShape,
+                        modifier = Modifier.widthIn(max = 160.dp)
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            PrimaryTabRow(selectedTabIndex = activeTabIndex) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(selected = activeTabIndex == index, onClick = { activeTabIndex = index }) {
-                        Text(text = title, modifier = Modifier.padding(12.dp))
-                    }
-                }
-            }
-
-            val currentEntry = screenState.historyEntryId
             val isFormatted = activeTabIndex == 1
-            Button(
-                onClick = { viewModel.formatText() },
-                enabled = transcription.isNotBlank() && !screenState.isBusy,
-                modifier = Modifier.padding(vertical = 8.dp)
-            ) { Text("Format") }
-
             key(activeTabIndex, currentEntry) {
                 TranscriptPane(
-                    text = if (isFormatted) formattedText else transcription,
-                    label = if (isFormatted) "Formatted text" else "Raw transcription",
-                    emptyText = if (isFormatted) "Formatted text will appear here." else "Your transcription will appear here.",
+                    rawText = transcription,
+                    formattedText = formattedText,
+                    selectedFormatted = isFormatted,
+                    onSelectFormatted = { activeTabIndex = if (it) 1 else 0 },
                     textHeight = if (isFormatted) formattedHeight else transcriptionHeight,
-                    onExpand = currentEntry?.let { id -> { openReader(id, isFormatted) } }
+                    onExpand = currentEntry?.let { id -> { openReader(id, isFormatted) } },
+                    onFormat = viewModel::formatText,
+                    isBusy = screenState.isBusy,
+                    isFormatting = formattingCurrent
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(10.dp)
-                    .padding(vertical = 4.dp)
-                    .pointerInput(activeTabIndex) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            val deltaDp = with(density) { dragAmount.y.toDp() }
-                            if (activeTabIndex == 0) {
-                                transcriptionHeight = (transcriptionHeight + deltaDp).coerceIn(80.dp, 800.dp)
-                            } else {
-                                formattedHeight = (formattedHeight + deltaDp).coerceIn(80.dp, 800.dp)
-                            }
-                        }
-                    }
-                    .background(Color.Transparent),
-                contentAlignment = Alignment.Center
-            ) {
+            if (transcription.isNotBlank()) {
                 Box(
                     modifier = Modifier
-                        .width(80.dp)
-                        .height(4.dp)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-                )
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .padding(vertical = 4.dp)
+                        .pointerInput(activeTabIndex) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                val deltaDp = with(density) { dragAmount.y.toDp() }
+                                if (activeTabIndex == 0) {
+                                    transcriptionHeight = (transcriptionHeight + deltaDp).coerceIn(80.dp, 800.dp)
+                                } else {
+                                    formattedHeight = (formattedHeight + deltaDp).coerceIn(80.dp, 800.dp)
+                                }
+                            }
+                        }
+                        .background(Color.Transparent),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(80.dp)
+                            .height(4.dp)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                    )
+                }
             }
 
         }
@@ -321,10 +295,12 @@ internal fun MainScreen(
                     TranscriptionUiState.WaitingForApiKey -> {
                         Text("Add an OpenAI API key in Settings to continue.")
                     }
-                    is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.FormattingText -> {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Formatting text...")
+                    TranscriptionUiState.FormattingText -> {
+                        if (!formattingCurrent) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Formatting a history entry…")
+                        }
                     }
                     is com.valenzine.whisperdroid.viewmodel.TranscriptionUiState.Error -> {
                         // Show snackbar and reset state once for this error

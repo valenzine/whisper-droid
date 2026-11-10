@@ -5,12 +5,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.valenzine.whisperdroid.viewmodel.SettingsViewModel
@@ -190,13 +192,10 @@ fun SettingsScreen() {
 
             Button(onClick = {
                 viewModel.save(
-                    AppSettings(
+                    settings.copy(
                         apiKey = tempApiKey,
-                        prompts = settings.prompts,
-                        activePromptId = settings.activePromptId,
                         transcriptionModel = tempTranscriptionModel,
-                        llmModel = tempLlmModel,
-                        autoProcess = settings.autoProcess
+                        llmModel = tempLlmModel
                     )
                 )
                 showSnackbar = true
@@ -215,7 +214,10 @@ fun SettingsScreen() {
 }
 
 @Composable
-private fun PromptManagementCard(settings: AppSettings, viewModel: SettingsViewModel) {
+private fun PromptManagementCard(
+    settings: AppSettings,
+    viewModel: SettingsViewModel
+) {
     var editorId by rememberSaveable { mutableStateOf<String?>(settings.activePromptId) }
     var nameDraft by rememberSaveable { mutableStateOf("") }
     var contentDraft by rememberSaveable { mutableStateOf("") }
@@ -241,6 +243,25 @@ private fun PromptManagementCard(settings: AppSettings, viewModel: SettingsViewM
                     nameDraft = ""
                     contentDraft = DEFAULT_LLM_PROMPT
                 }) { Text("New") }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .toggleable(
+                        value = settings.autoProcess,
+                        role = Role.Switch,
+                        onValueChange = { viewModel.setAutoProcess(it) }
+                    )
+                    .heightIn(min = 48.dp)
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Automatically format new transcriptions",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Switch(checked = settings.autoProcess, onCheckedChange = null)
             }
             Spacer(modifier = Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {

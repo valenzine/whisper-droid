@@ -1,12 +1,15 @@
 package com.valenzine.whisperdroid.ui
 
 import android.content.ClipData
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -15,7 +18,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -30,34 +39,79 @@ import kotlinx.coroutines.launch
 
 @Composable
 internal fun TranscriptPane(
-    text: String,
-    label: String,
-    emptyText: String,
+    rawText: String,
+    formattedText: String,
+    selectedFormatted: Boolean,
+    onSelectFormatted: (Boolean) -> Unit,
     textHeight: Dp,
-    onExpand: (() -> Unit)?
+    onExpand: (() -> Unit)?,
+    onFormat: () -> Boolean,
+    isBusy: Boolean,
+    isFormatting: Boolean = false
 ) {
+    val text = if (selectedFormatted) formattedText else rawText
+    val label = if (selectedFormatted) "Formatted text" else "Raw transcription"
+    val hasTranscript = rawText.isNotBlank()
+    val hasFormatted = formattedText.isNotBlank()
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(label, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
-                CopyTranscriptButton(text, label)
-                IconButton(enabled = onExpand != null && text.isNotBlank(), onClick = { onExpand?.invoke() }) {
-                    Icon(painterResource(R.drawable.ic_fullscreen), contentDescription = "Open full screen")
+            if (hasTranscript) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
+                        SegmentedButton(
+                            selected = !selectedFormatted,
+                            onClick = { onSelectFormatted(false) },
+                            shape = SegmentedButtonDefaults.itemShape(0, 2),
+                            icon = {},
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) { Text("Raw") }
+                        SegmentedButton(
+                            selected = selectedFormatted,
+                            onClick = { onSelectFormatted(true) },
+                            shape = SegmentedButtonDefaults.itemShape(1, 2),
+                            icon = {},
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) { Text("Formatted") }
+                    }
+                    CopyTranscriptButton(text, label)
+                    IconButton(enabled = onExpand != null && text.isNotBlank(), onClick = { onExpand?.invoke() }) {
+                        Icon(painterResource(R.drawable.ic_fullscreen), contentDescription = "Open full screen")
+                    }
                 }
+                HorizontalDivider()
             }
-            HorizontalDivider()
             Box(
-                Modifier.fillMaxWidth().height(textHeight)
+                Modifier.fillMaxWidth().height(if (hasTranscript) textHeight else 96.dp)
                     .verticalScroll(rememberScrollState()).padding(16.dp)
             ) {
                 if (text.isBlank()) {
-                    Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (hasTranscript) "No formatted text yet." else "Your transcription will appear here.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 } else {
                     SelectionContainer {
                         Text(text, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+            if (hasTranscript && (isFormatting || !hasFormatted || selectedFormatted)) {
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                ) {
+                    when {
+                        isFormatting -> {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Text("Formatting…", modifier = Modifier.padding(vertical = 12.dp))
+                        }
+                        hasFormatted -> TextButton(onClick = { onFormat() }, enabled = !isBusy) { Text("Reformat") }
+                        else -> Button(onClick = { onFormat() }, enabled = !isBusy) { Text("Format") }
                     }
                 }
             }

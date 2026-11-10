@@ -22,10 +22,9 @@ class MainScreenControlsTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun processingControlsExposePromptPillsAndAutoFormatStatus() {
-        composeRule.onNodeWithText("Processing").assertIsDisplayed()
-        composeRule.onNodeWithText("Format manually when ready").assertIsDisplayed()
+    fun promptPillsStayOnMainScreen() {
         composeRule.onNodeWithText("Tidy up").assertIsDisplayed()
+        composeRule.onNodeWithText("Automatically format new transcriptions").assertDoesNotExist()
     }
 
     @Test
@@ -50,6 +49,7 @@ class MainScreenControlsTest {
         composeRule.onNodeWithContentDescription("Settings").performClick()
 
         composeRule.onNodeWithText("Processing prompts").assertIsDisplayed()
+        composeRule.onNodeWithText("Automatically format new transcriptions").assertIsDisplayed()
         composeRule.onNodeWithText("Save prompt").assertIsDisplayed()
     }
 }

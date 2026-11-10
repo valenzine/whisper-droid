@@ -128,7 +128,16 @@ class TranscriptReaderTest {
         var expanded = false
         composeRule.setContent {
             MaterialTheme {
-                TranscriptPane("Raw dictation", "Raw transcription", "No text", 150.dp) { expanded = true }
+                TranscriptPane(
+                    rawText = "Raw dictation",
+                    formattedText = "",
+                    selectedFormatted = false,
+                    onSelectFormatted = {},
+                    textHeight = 150.dp,
+                    onExpand = { expanded = true },
+                    onFormat = { true },
+                    isBusy = false
+                )
             }
         }
         composeRule.onNodeWithContentDescription("Copy transcript").assertIsDisplayed()
