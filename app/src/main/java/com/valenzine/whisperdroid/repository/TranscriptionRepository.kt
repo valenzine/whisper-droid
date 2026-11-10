@@ -28,16 +28,8 @@ data class StagedAudio(
 )
 
 interface TranscriptionGateway {
-    suspend fun stageUri(uri: Uri): StagedAudio
     suspend fun transcribeStaged(
         stagedAudio: StagedAudio,
-        apiKey: String,
-        model: String,
-        language: String? = null,
-        onProgress: ((String) -> Unit)? = null
-    ): String
-    suspend fun transcribeUri(
-        uri: Uri,
         apiKey: String,
         model: String,
         language: String? = null,
@@ -49,6 +41,11 @@ interface TranscriptionGateway {
 
 class TranscriptionRepository(context: Context) : TranscriptionGateway {
     private val context = context.applicationContext
+    private val stagingDirectory = File(this.context.cacheDir, "staged-audio")
+
+    internal fun clearAbandonedAudio() {
+        stagingDirectory.listFiles()?.forEach { it.delete() }
+    }
 
     private val transcriptionApi: TranscriptionApi
     private val llmApi: LlmApi
@@ -208,23 +205,6 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         }
     }
     
-    override suspend fun transcribeUri(
-        uri: Uri,
-        apiKey: String,
-        model: String,
-        language: String?,
-        onProgress: ((String) -> Unit)?
-    ): String = withContext(Dispatchers.IO) {
-        val stagedAudio = stageUri(uri)
-        try {
-            transcribeStaged(stagedAudio, apiKey, model, language, onProgress)
-        } finally {
-            stagedAudio.file.delete()
-        }
-    }
-
-    override suspend fun stageUri(uri: Uri): StagedAudio = copyUriToCache(uri)
-
     override suspend fun transcribeStaged(
         stagedAudio: StagedAudio,
         apiKey: String,
@@ -235,7 +215,7 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         transcribeFile(stagedAudio.file, apiKey, model, language, onProgress)
     }
 
-    private suspend fun copyUriToCache(uri: Uri): StagedAudio = withContext(Dispatchers.IO) {
+    internal suspend fun stageUri(uri: Uri): StagedAudio = withContext(Dispatchers.IO) {
         val metadata = context.contentResolver.query(
             uri,
             arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
@@ -258,7 +238,8 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
             .replace(Regex("[^a-z0-9]"), "")
             .take(16)
         val suffix = if (extension.isNotBlank()) ".${extension}" else ".audio"
-        val temporary = File.createTempFile("audio-${UUID.randomUUID()}-", suffix, context.cacheDir)
+        stagingDirectory.mkdirs()
+        val temporary = File.createTempFile("audio-${UUID.randomUUID()}-", suffix, stagingDirectory)
         try {
             val digest = MessageDigest.getInstance("SHA-256")
             context.contentResolver.openInputStream(uri)?.use { input ->

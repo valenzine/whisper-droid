@@ -1,6 +1,5 @@
 package com.valenzine.whisperdroid.viewmodel
 
-import android.net.Uri
 import com.valenzine.whisperdroid.repository.AppSettings
 import com.valenzine.whisperdroid.repository.SettingsGateway
 import com.valenzine.whisperdroid.repository.TranscriptionGateway
@@ -8,6 +7,7 @@ import com.valenzine.whisperdroid.repository.StagedAudio
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -26,6 +26,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class TranscriptionViewModelTest {
     private val dispatcher = StandardTestDispatcher()
+    private val audio = StagedAudio(File("test-audio"), "test-audio", "test-fingerprint")
 
     @Before
     fun setUp() {
@@ -38,41 +39,33 @@ class TranscriptionViewModelTest {
     }
 
     @Test
-    fun rejectsSecondTranscriptionWhileFirstRequestIsActive() = runTest {
-        val transcription = CompletableDeferred<String>()
-        val gateway = RecordingGateway(transcriptionResult = transcription)
-        val viewModel = TranscriptionViewModel(gateway, FakeSettings())
-        var acceptedEvents = 0
+    fun stagedAudioWaitsUntilAnApiKeyIsSaved() = runTest {
+        val gateway = RecordingGateway(CompletableDeferred("raw dictation"))
+        val settings = FakeSettings(apiKey = "")
+        val viewModel = TranscriptionViewModel(gateway, settings)
+        launch { viewModel.processStagedAudio(audio) }
+        runCurrent()
 
-        assertTrue(viewModel.startTranscription(onAccepted = { acceptedEvents += 1 }) { _, _ ->
-            gateway.transcriptionCalls += 1
-            transcription.await()
-        })
-        assertFalse(viewModel.startTranscription(onAccepted = { acceptedEvents += 1 }) { _, _ -> "second result" })
+        assertEquals(TranscriptionUiState.WaitingForApiKey, viewModel.screenState.value.phase)
+        assertEquals(0, gateway.transcriptionCalls)
 
-        transcription.complete("first result")
+        settings.setApiKey("test-key")
         advanceUntilIdle()
-        assertEquals("first result", viewModel.screenState.value.transcription)
+
+        assertEquals("raw dictation", viewModel.screenState.value.transcription)
         assertEquals(1, gateway.transcriptionCalls)
-        assertEquals(1, acceptedEvents)
     }
 
     @Test
     fun autoProcessingOffKeepsTranscriptWithoutFormatting() = runTest {
         val gateway = RecordingGateway(transcriptionResult = CompletableDeferred("raw dictation"))
         val viewModel = TranscriptionViewModel(gateway, FakeSettings(autoProcess = false))
-        var selectedModel: String? = null
-
-        assertTrue(viewModel.startTranscription { settings, _ ->
-            selectedModel = settings.transcriptionModel
-            "raw dictation"
-        })
-        advanceUntilIdle()
+        viewModel.processStagedAudio(audio)
 
         assertEquals("raw dictation", viewModel.screenState.value.transcription)
         assertEquals("", viewModel.screenState.value.formattedText)
         assertEquals(0, gateway.formatCalls)
-        assertEquals("gpt-transcribe", selectedModel)
+        assertEquals("gpt-transcribe", gateway.lastTranscriptionModel)
     }
 
     @Test
@@ -82,7 +75,7 @@ class TranscriptionViewModelTest {
         val gateway = RecordingGateway(transcriptionResult = transcription)
         val viewModel = TranscriptionViewModel(gateway, settings)
 
-        assertTrue(viewModel.startTranscription { _, _ -> transcription.await() })
+        launch { viewModel.processStagedAudio(audio) }
         runCurrent()
         settings.update(prompt = "Use short paragraphs", llmModel = "test-formatting-model")
         transcription.complete("raw dictation")
@@ -109,8 +102,7 @@ class TranscriptionViewModelTest {
     fun formattingFailurePreservesTranscriptAndPreviousFormattedOutput() = runTest {
         val gateway = RecordingGateway(transcriptionResult = CompletableDeferred("raw dictation"))
         val viewModel = TranscriptionViewModel(gateway, FakeSettings())
-        viewModel.startTranscription { _, _ -> "raw dictation" }
-        advanceUntilIdle()
+        viewModel.processStagedAudio(audio)
         assertTrue(viewModel.formatText())
         assertFalse(viewModel.formatText())
         advanceUntilIdle()
@@ -126,14 +118,14 @@ class TranscriptionViewModelTest {
 
     @Test
     fun laterTranscriptionFailurePreservesPreviousTranscriptAndOutput() = runTest {
-        val viewModel = TranscriptionViewModel(RecordingGateway(), FakeSettings())
-        viewModel.startTranscription { _, _ -> "raw dictation" }
-        advanceUntilIdle()
+        val gateway = RecordingGateway(CompletableDeferred("raw dictation"))
+        val viewModel = TranscriptionViewModel(gateway, FakeSettings())
+        viewModel.processStagedAudio(audio)
         viewModel.formatText()
         advanceUntilIdle()
 
-        viewModel.startTranscription { _, _ -> throw IllegalStateException("upload unavailable") }
-        advanceUntilIdle()
+        gateway.transcriptionError = IllegalStateException("upload unavailable")
+        viewModel.processStagedAudio(audio)
 
         assertEquals("raw dictation", viewModel.screenState.value.transcription)
         assertEquals("edited dictation", viewModel.screenState.value.formattedText)
@@ -141,16 +133,21 @@ class TranscriptionViewModelTest {
     }
 
     private class FakeSettings(
-        autoProcess: Boolean = false
+        autoProcess: Boolean = false,
+        apiKey: String = "test-key"
     ) : SettingsGateway {
         private val state = MutableStateFlow(AppSettings(
-            apiKey = "test-key",
+            apiKey = apiKey,
             llmPrompt = "Initial prompt",
             transcriptionModel = "gpt-transcribe",
             llmModel = "gpt-5.6-luna",
             autoProcess = autoProcess
         ))
         override val settingsFlow: StateFlow<AppSettings> = state
+
+        fun setApiKey(apiKey: String) {
+            state.value = state.value.copy(apiKey = apiKey)
+        }
 
         fun update(prompt: String, llmModel: String) {
             state.value = state.value.copy(llmPrompt = prompt, llmModel = llmModel)
@@ -167,8 +164,8 @@ class TranscriptionViewModelTest {
         var lastFormattedSource: String? = null
         var formatError: Throwable? = null
 
-        override suspend fun stageUri(uri: Uri): StagedAudio =
-            StagedAudio(File.createTempFile("audio", ".tmp"), "test-audio", "test-fingerprint")
+        var lastTranscriptionModel: String? = null
+        var transcriptionError: Exception? = null
 
         override suspend fun transcribeStaged(
             stagedAudio: StagedAudio,
@@ -178,17 +175,8 @@ class TranscriptionViewModelTest {
             onProgress: ((String) -> Unit)?
         ): String {
             transcriptionCalls += 1
-            return transcriptionResult.await()
-        }
-
-        override suspend fun transcribeUri(
-            uri: Uri,
-            apiKey: String,
-            model: String,
-            language: String?,
-            onProgress: ((String) -> Unit)?
-        ): String {
-            transcriptionCalls += 1
+            lastTranscriptionModel = model
+            transcriptionError?.let { throw it }
             return transcriptionResult.await()
         }
 
