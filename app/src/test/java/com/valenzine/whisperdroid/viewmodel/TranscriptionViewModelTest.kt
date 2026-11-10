@@ -5,6 +5,7 @@ import com.valenzine.whisperdroid.repository.SettingsGateway
 import com.valenzine.whisperdroid.repository.TranscriptionGateway
 import com.valenzine.whisperdroid.repository.StagedAudio
 import java.io.File
+import java.net.UnknownHostException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -130,6 +131,44 @@ class TranscriptionViewModelTest {
         assertEquals("raw dictation", viewModel.screenState.value.transcription)
         assertEquals("edited dictation", viewModel.screenState.value.formattedText)
         assertEquals("upload unavailable", viewModel.screenState.value.error)
+    }
+
+    @Test
+    fun offlineTranscriptionFailurePreservesTheCurrentTranscript() = runTest {
+        val gateway = RecordingGateway(CompletableDeferred("raw dictation"))
+        val viewModel = TranscriptionViewModel(gateway, FakeSettings())
+        viewModel.processStagedAudio(audio)
+        viewModel.formatText()
+        advanceUntilIdle()
+
+        gateway.transcriptionError = UnknownHostException("api.openai.com")
+        viewModel.processStagedAudio(audio)
+
+        assertEquals("raw dictation", viewModel.screenState.value.transcription)
+        assertEquals("edited dictation", viewModel.screenState.value.formattedText)
+        assertEquals(
+            "No internet connection. Turn off Airplane mode or connect to Wi-Fi or mobile data, then try again.",
+            viewModel.screenState.value.error
+        )
+    }
+
+    @Test
+    fun offlineFormattingFailurePreservesTheCurrentTexts() = runTest {
+        val gateway = RecordingGateway(CompletableDeferred("raw dictation"))
+        val viewModel = TranscriptionViewModel(gateway, FakeSettings())
+        viewModel.processStagedAudio(audio)
+        advanceUntilIdle()
+
+        gateway.formatError = UnknownHostException("api.openai.com")
+        assertTrue(viewModel.formatText())
+        advanceUntilIdle()
+
+        assertEquals("raw dictation", viewModel.screenState.value.transcription)
+        assertEquals("", viewModel.screenState.value.formattedText)
+        assertEquals(
+            "No internet connection. Turn off Airplane mode or connect to Wi-Fi or mobile data, then try again.",
+            viewModel.screenState.value.error
+        )
     }
 
     private class FakeSettings(
