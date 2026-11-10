@@ -40,6 +40,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -163,7 +164,7 @@ private fun HistoryEntryCard(
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "${entry.sourceOrigin} · ${historyTimestamp(entry.createdAt)}",
+                    "${entry.sourceOrigin} · ${historyTimestamp(entry.createdAt, AndroidDateFormat.is24HourFormat(LocalContext.current))}",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
@@ -171,7 +172,7 @@ private fun HistoryEntryCard(
                 )
                 Box {
                     IconButton(onClick = { moreExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More actions for ${entry.sourceOrigin} at ${historyTimestamp(entry.createdAt)}")
+                        Icon(Icons.Default.MoreVert, contentDescription = "More actions for ${entry.sourceOrigin} at ${historyTimestamp(entry.createdAt, AndroidDateFormat.is24HourFormat(LocalContext.current))}")
                     }
                     DropdownMenu(
                         expanded = moreExpanded,
@@ -203,10 +204,6 @@ private fun HistoryEntryCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(
-                entry.displayName,
-                style = MaterialTheme.typography.bodySmall
-            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onOpen, enabled = !isBusy) { Text("Open") }
                 TextButton(onClick = onReadRaw) { Text("Read raw") }
@@ -218,7 +215,9 @@ private fun HistoryEntryCard(
     }
 }
 
-private fun historyTimestamp(timestamp: Long): String {
-    val pattern = AndroidDateFormat.getBestDateTimePattern(Locale.getDefault(), "MMM d jm")
-    return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(timestamp))
+private fun historyTimestamp(timestamp: Long, use24HourClock: Boolean): String {
+    val locale = Locale.getDefault()
+    val skeleton = if (use24HourClock) "dMMMHHmm" else "dMMMhm"
+    val pattern = AndroidDateFormat.getBestDateTimePattern(locale, skeleton)
+    return SimpleDateFormat(pattern, locale).format(Date(timestamp))
 }

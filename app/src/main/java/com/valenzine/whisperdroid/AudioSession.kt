@@ -22,8 +22,7 @@ internal class AudioSession(
     private class Request(
         val staged: Deferred<StagedAudio>,
         val language: String?,
-        val expectedFingerprint: String?,
-        val sourceOrigin: String
+        val expectedFingerprint: String?
     )
 
     private val slots = Semaphore(2)
@@ -52,18 +51,19 @@ internal class AudioSession(
     }
 
     /** The receiver can release its URI grant as soon as the returned signal completes. */
-    fun enqueue(uri: Uri, language: String?, expectedFingerprint: String? = null, sourceOrigin: String = "Audio"): Deferred<Unit>? {
+    fun enqueue(uri: Uri, language: String?, expectedFingerprint: String? = null, sourceOrigin: String = "Files"): Deferred<Unit>? {
         if (!slots.tryAcquire()) return null
 
+        val importedAt = System.currentTimeMillis()
         val copyFinished = CompletableDeferred<Unit>()
         val staged = scope.async(start = CoroutineStart.LAZY) {
             try {
-                stage(uri, sourceOrigin, System.currentTimeMillis())
+                stage(uri, sourceOrigin, importedAt)
             } finally {
                 copyFinished.complete(Unit)
             }
         }
-        check(requests.trySend(Request(staged, language, expectedFingerprint, sourceOrigin)).isSuccess)
+        check(requests.trySend(Request(staged, language, expectedFingerprint)).isSuccess)
         staged.start()
         return copyFinished
     }
