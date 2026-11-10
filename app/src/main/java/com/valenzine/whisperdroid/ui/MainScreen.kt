@@ -16,8 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -287,50 +285,20 @@ internal fun MainScreen(
             }
 
             val currentEntry = screenState.historyEntryId
-            val selectedText = if (activeTabIndex == 0) transcription else formattedText
-            val clipboardManager = LocalClipboardManager.current
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (currentEntry != null && selectedText.isNotBlank()) {
-                    TextButton(onClick = { openReader(currentEntry, activeTabIndex == 1) }) { Text("Full screen") }
-                }
-                Button(
-                    onClick = { viewModel.formatText() },
-                    enabled = transcription.isNotBlank() && !screenState.isBusy
-                ) { Text("Format") }
-                Spacer(modifier = Modifier.width(8.dp))
-                TextButton(
-                    onClick = {
-                        clipboardManager.setText(AnnotatedString(selectedText))
-                        screenScope.launch { snackbarHostState.showSnackbar("Copied to clipboard") }
-                    },
-                    enabled = selectedText.isNotBlank()
-                ) { Text("Copy") }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
+            val isFormatted = activeTabIndex == 1
+            Button(
+                onClick = { viewModel.formatText() },
+                enabled = transcription.isNotBlank() && !screenState.isBusy,
+                modifier = Modifier.padding(vertical = 8.dp)
+            ) { Text("Format") }
 
-            if (activeTabIndex == 0) {
-                TextField(
-                    value = transcription,
-                    onValueChange = { },
-                    readOnly = true,
-                    label = { Text("Transcription") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(transcriptionHeight),
-                    maxLines = Int.MAX_VALUE,
-                    singleLine = false
-                )
-            } else {
-                TextField(
-                    value = formattedText,
-                    onValueChange = { },
-                    readOnly = true,
-                    label = { Text("Formatted Text") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(formattedHeight),
-                    maxLines = Int.MAX_VALUE,
-                    singleLine = false
+            key(activeTabIndex) {
+                TranscriptPane(
+                    text = if (isFormatted) formattedText else transcription,
+                    label = if (isFormatted) "Formatted text" else "Raw transcription",
+                    emptyText = if (isFormatted) "Formatted text will appear here." else "Your transcription will appear here.",
+                    textHeight = if (isFormatted) formattedHeight else transcriptionHeight,
+                    onExpand = currentEntry?.let { id -> { openReader(id, isFormatted) } }
                 )
             }
 
