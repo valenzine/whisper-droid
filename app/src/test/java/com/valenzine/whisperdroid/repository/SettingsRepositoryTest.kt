@@ -25,21 +25,22 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun settingsSavePreservesTheActivePromptAndPromptList() = runTest {
+    fun settingsSavePreservesPromptsAndAutomaticFormatting() = runTest {
         val repository = newRepository()
         repository.createPrompt("Meeting notes", "Make concise paragraphs.")
+        repository.saveAutoProcess(true)
         val promptState = repository.settingsFlow.first()
 
         repository.saveSettings(
             AppSettings(
-            apiKey = "sk-test",
-            transcriptionModel = "gpt-4o-mini-transcribe",
-            llmModel = "gpt-6-luna",
-            autoProcess = true
+                apiKey = "sk-test",
+                transcriptionModel = "gpt-4o-mini-transcribe",
+                llmModel = "gpt-6-luna"
             )
         )
 
         val actual = repository.settingsFlow.first()
+        assertEquals(true, actual.autoProcess)
         assertEquals(promptState.prompts, actual.prompts)
         assertEquals(promptState.activePromptId, actual.activePromptId)
         assertEquals("Make concise paragraphs.", actual.llmPrompt)
@@ -82,14 +83,18 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun builtInDefaultCannotBeModified() = runTest {
+    fun builtInDefaultKeepsItsIdentityWhileItsContentCanBeCustomizedAndReset() = runTest {
         val repository = newRepository()
 
         repository.updatePrompt(SavedPrompt(DEFAULT_PROMPT_ID, "Changed", "Changed content"))
 
         val default = repository.settingsFlow.first().activePrompt
-        assertEquals("Default prompt", default.name)
-        assertEquals(DEFAULT_LLM_PROMPT, default.content)
+        assertEquals("Tidy up", default.name)
+        assertEquals("Changed content", default.content)
+        assertEquals(true, default.isBuiltIn)
+
+        repository.resetDefaultPrompt()
+        assertEquals(DEFAULT_LLM_PROMPT, repository.settingsFlow.first().activePrompt.content)
     }
 
     @Test
@@ -104,8 +109,8 @@ class SettingsRepositoryTest {
 
         assertEquals(2, prompts.size)
         assertEquals(DEFAULT_PROMPT_ID, prompts.first().id)
-        assertEquals("Default prompt", prompts.first().name)
-        assertEquals(DEFAULT_LLM_PROMPT, prompts.first().content)
+        assertEquals("Tidy up", prompts.first().name)
+        assertEquals("Changed", prompts.first().content)
         assertEquals(true, prompts.first().isBuiltIn)
         assertEquals("custom", prompts.last().id)
     }
@@ -118,7 +123,7 @@ class SettingsRepositoryTest {
         repository.createPrompt("Second", "Second content")
         val second = repository.settingsFlow.first().activePrompt
 
-        repository.updatePromptContent(first.id, "Updated first content")
+        repository.updatePrompt(first.copy(content = "Updated first content"))
 
         val settings = repository.settingsFlow.first()
         assertEquals(second.id, settings.activePromptId)

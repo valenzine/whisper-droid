@@ -20,12 +20,18 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 import java.security.MessageDigest
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 data class StagedAudio(
     val file: File,
     val displayName: String,
-    val sha256: String
+    val sha256: String,
+    val sourceOrigin: String = "Audio",
+    val importedAt: Long = System.currentTimeMillis()
 )
+
+data class FormattedTranscript(val text: String, val summary: String)
 
 interface TranscriptionGateway {
     suspend fun transcribeStaged(
@@ -36,7 +42,7 @@ interface TranscriptionGateway {
         onProgress: ((String) -> Unit)? = null
     ): String
 
-    suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): String
+    suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): FormattedTranscript
 }
 
 class TranscriptionRepository(context: Context) : TranscriptionGateway {
@@ -215,7 +221,7 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         transcribeFile(stagedAudio.file, apiKey, model, language, onProgress)
     }
 
-    internal suspend fun stageUri(uri: Uri): StagedAudio = withContext(Dispatchers.IO) {
+    internal suspend fun stageUri(uri: Uri, sourceOrigin: String = "Audio", importedAt: Long = System.currentTimeMillis()): StagedAudio = withContext(Dispatchers.IO) {
         val metadata = context.contentResolver.query(
             uri,
             arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
@@ -259,7 +265,9 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
             StagedAudio(
                 file = temporary,
                 displayName = displayName,
-                sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+                sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) },
+                sourceOrigin = sourceOrigin,
+                importedAt = importedAt
             )
         } catch (error: Throwable) {
             temporary.delete()
@@ -388,15 +396,29 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         return response.text
     }
 
-    override suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): String {
+    override suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): FormattedTranscript {
         require(text.isNotBlank()) { "There is no transcription to format" }
         val userPrompt = "$prompt\n\n$text"
         
         val request = LlmRequest(
             model = model,
             reasoningEffort = if (model == ModelCatalog.GPT_6_LUNA) "none" else null,
+            responseFormat = ResponseFormat(
+                jsonSchema = JsonSchema(
+                    name = "formatted_transcript",
+                    schema = mapOf(
+                        "type" to "object",
+                        "additionalProperties" to false,
+                        "properties" to mapOf(
+                            "text" to mapOf("type" to "string"),
+                            "summary" to mapOf("type" to "string")
+                        ),
+                        "required" to listOf("text", "summary")
+                    )
+                )
+            ),
             messages = listOf(
-                Message("system", "You are a direct text formatting engine. Provide ONLY the formatted text requested by the user, with no additional commentary, introductions, or conclusions."),
+                Message("system", "Apply the requested edit to the transcript and return it in the JSON text field. In the summary field, write one concise sentence describing the transcript in its original language. Do not copy it verbatim or invent details."),
                 Message("user", userPrompt)
             )
         )
@@ -405,7 +427,18 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
             authorization = "Bearer $apiKey",
             request = request
         )
-        return response.choices.first().message.content
+        val payload = runCatching {
+            Gson().fromJson<Map<String, String>>(
+                response.choices.first().message.content,
+                object : TypeToken<Map<String, String>>() {}.type
+            )
+        }.getOrNull() ?: throw IllegalStateException("Formatting response could not be read.")
+        val formattedText = payload["text"]?.replace("\r\n", "\n")?.trim()
+            ?: throw IllegalStateException("Formatting response did not include text.")
+        require(formattedText.isNotBlank()) { "Formatting response did not include text." }
+        val summary = payload["summary"]?.replace(Regex("\\s+"), " ")?.trim()
+            ?: throw IllegalStateException("Formatting response did not include a summary.")
+        return FormattedTranscript(formattedText, summary)
     }
     
     private companion object {

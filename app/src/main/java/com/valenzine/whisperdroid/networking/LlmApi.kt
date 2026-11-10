@@ -16,7 +16,19 @@ interface LlmApi {
 data class LlmRequest(
     val model: String,
     val messages: List<Message>,
-    @SerializedName("reasoning_effort") val reasoningEffort: String? = null
+    @SerializedName("reasoning_effort") val reasoningEffort: String? = null,
+    @SerializedName("response_format") val responseFormat: ResponseFormat? = null
+)
+
+data class ResponseFormat(
+    val type: String = "json_schema",
+    @SerializedName("json_schema") val jsonSchema: JsonSchema
+)
+
+data class JsonSchema(
+    val name: String,
+    val strict: Boolean = true,
+    val schema: Map<String, Any>
 )
 
 data class Message(

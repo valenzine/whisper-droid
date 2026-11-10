@@ -4,6 +4,8 @@ import com.valenzine.whisperdroid.repository.AppSettings
 import com.valenzine.whisperdroid.repository.SettingsGateway
 import com.valenzine.whisperdroid.repository.TranscriptionGateway
 import com.valenzine.whisperdroid.repository.StagedAudio
+import com.valenzine.whisperdroid.repository.FormattedTranscript
+import com.valenzine.whisperdroid.repository.SavedPrompt
 import java.io.File
 import java.net.UnknownHostException
 import kotlinx.coroutines.CompletableDeferred
@@ -86,6 +88,22 @@ class TranscriptionViewModelTest {
         assertEquals("Use short paragraphs", gateway.lastPrompt)
         assertEquals("test-formatting-model", gateway.lastLlmModel)
         assertEquals("raw dictation", gateway.lastFormattedSource)
+    }
+
+    @Test
+    fun manualEditUsesTheTappedPromptEvenWhenThePersistedSelectionDiffers() = runTest {
+        val gateway = RecordingGateway(CompletableDeferred("raw dictation"))
+        val settings = FakeSettings()
+        settings.addPrompt(SavedPrompt("gist", "Gist", "Write a short gist."))
+        val viewModel = TranscriptionViewModel(gateway, settings)
+        viewModel.processStagedAudio(audio)
+
+        assertTrue(viewModel.formatText(promptId = "gist"))
+        advanceUntilIdle()
+
+        assertEquals("Write a short gist.", gateway.lastPrompt)
+        assertEquals("test-prompt", settings.settingsFlow.value.activePromptId)
+        assertEquals(1, gateway.formatCalls)
     }
 
     @Test
@@ -175,21 +193,33 @@ class TranscriptionViewModelTest {
         autoProcess: Boolean = false,
         apiKey: String = "test-key"
     ) : SettingsGateway {
+        private val promptId = "test-prompt"
         private val state = MutableStateFlow(AppSettings(
             apiKey = apiKey,
             llmPrompt = "Initial prompt",
+            prompts = listOf(SavedPrompt(promptId, "Test prompt", "Initial prompt")),
+            activePromptId = promptId,
             transcriptionModel = "gpt-transcribe",
             llmModel = "gpt-5.6-luna",
             autoProcess = autoProcess
         ))
         override val settingsFlow: StateFlow<AppSettings> = state
 
+        fun addPrompt(prompt: SavedPrompt) {
+            state.value = state.value.copy(prompts = state.value.prompts + prompt)
+        }
+
         fun setApiKey(apiKey: String) {
             state.value = state.value.copy(apiKey = apiKey)
         }
 
         fun update(prompt: String, llmModel: String) {
-            state.value = state.value.copy(llmPrompt = prompt, llmModel = llmModel)
+            state.value = state.value.copy(
+                llmPrompt = prompt,
+                prompts = listOf(SavedPrompt(promptId, "Test prompt", prompt)),
+                activePromptId = promptId,
+                llmModel = llmModel
+            )
         }
     }
 
@@ -219,13 +249,13 @@ class TranscriptionViewModelTest {
             return transcriptionResult.await()
         }
 
-        override suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): String {
+        override suspend fun formatText(text: String, apiKey: String, prompt: String, model: String): FormattedTranscript {
             formatCalls += 1
             lastPrompt = prompt
             lastLlmModel = model
             lastFormattedSource = text
             formatError?.let { throw it }
-            return "edited dictation"
+            return FormattedTranscript("edited dictation", "An edited dictation.")
         }
     }
 

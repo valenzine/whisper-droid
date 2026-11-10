@@ -46,13 +46,18 @@ data class SavedPrompt(
 
 private fun builtInPrompt() = SavedPrompt(
     id = DEFAULT_PROMPT_ID,
-    name = "Default prompt",
+    name = "Tidy up",
     content = DEFAULT_LLM_PROMPT,
     isBuiltIn = true
 )
 
-private fun List<SavedPrompt>.normalizeBuiltIn(): List<SavedPrompt> =
-    listOf(builtInPrompt()) + filterNot { it.id == DEFAULT_PROMPT_ID }
+private fun List<SavedPrompt>.normalizeBuiltIn(): List<SavedPrompt> {
+    val defaultContent = firstOrNull { it.id == DEFAULT_PROMPT_ID }
+        ?.content
+        ?.takeIf(String::isNotBlank)
+        ?: DEFAULT_LLM_PROMPT
+    return listOf(builtInPrompt().copy(content = defaultContent)) + filterNot { it.id == DEFAULT_PROMPT_ID }
+}
 
 internal fun decodePrompts(serialized: String?): List<SavedPrompt> {
     val decoded = runCatching {
@@ -133,14 +138,13 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Settin
         )
     }
 
-    /** Persist the Settings form in a single transaction so requests never see a partial form save. */
+    /** Save the API key and models together. Prompt and auto-format controls persist independently. */
     suspend fun saveSettings(settings: AppSettings) {
         dataStore.edit {
             it[apiKey] = settings.apiKey
             it[transcriptionModel] = settings.transcriptionModel
             it[llmModelKey] = settings.llmModel.takeUnless { model -> model == RETIRED_LLM_MODEL }
                 ?: ModelCatalog.DEFAULT_LLM_MODEL
-            it[autoProcess] = settings.autoProcess
         }
     }
 
@@ -149,36 +153,39 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Settin
         if (prompts.any { it.id == id }) storePrompts(preferences, prompts, id)
     }
 
-    suspend fun createPrompt(name: String, content: String) = dataStore.edit { preferences ->
-        val prompts = decodePrompts(preferences[savedPromptsKey])
+    suspend fun createPrompt(name: String, content: String): String {
         val prompt = SavedPrompt(
             id = java.util.UUID.randomUUID().toString(),
             name = name.trim(),
             content = content.ifBlank { DEFAULT_LLM_PROMPT }
         )
-        storePrompts(preferences, prompts + prompt, prompt.id)
+        dataStore.edit { preferences ->
+            val prompts = decodePrompts(preferences[savedPromptsKey])
+            storePrompts(preferences, prompts + prompt, prompt.id)
+        }
+        return prompt.id
     }
 
     suspend fun updatePrompt(prompt: SavedPrompt) = dataStore.edit { preferences ->
         val prompts = decodePrompts(preferences[savedPromptsKey])
         val updated = prompts.map { saved ->
-            if (saved.id != prompt.id || saved.isBuiltIn) saved
-            else prompt.copy(name = prompt.name.trim(), content = prompt.content.ifBlank { DEFAULT_LLM_PROMPT })
+            when {
+                saved.id != prompt.id -> saved
+                saved.isBuiltIn -> saved.copy(content = prompt.content.ifBlank { DEFAULT_LLM_PROMPT })
+                else -> prompt.copy(name = prompt.name.trim(), content = prompt.content.ifBlank { DEFAULT_LLM_PROMPT })
+            }
         }
         val activeId = preferences[activePromptIdKey]?.takeIf { id -> updated.any { it.id == id } } ?: updated.first().id
         storePrompts(preferences, updated, activeId)
     }
 
-    suspend fun updatePromptContent(id: String, content: String) = dataStore.edit { preferences ->
-        val prompts = decodePrompts(preferences[savedPromptsKey])
-        val updated = prompts.map { prompt ->
-            if (prompt.id == id && !prompt.isBuiltIn) {
-                prompt.copy(content = content.ifBlank { DEFAULT_LLM_PROMPT })
-            } else prompt
+    suspend fun resetDefaultPrompt() = dataStore.edit { preferences ->
+        val prompts = decodePrompts(preferences[savedPromptsKey]).map { prompt ->
+            if (prompt.id == DEFAULT_PROMPT_ID) prompt.copy(content = DEFAULT_LLM_PROMPT) else prompt
         }
-        val activeId = preferences[activePromptIdKey]?.takeIf { active -> updated.any { it.id == active } }
-            ?: updated.first().id
-        storePrompts(preferences, updated, activeId)
+        val activeId = preferences[activePromptIdKey]?.takeIf { active -> prompts.any { it.id == active } }
+            ?: DEFAULT_PROMPT_ID
+        storePrompts(preferences, prompts, activeId)
     }
 
     suspend fun deletePrompt(id: String) = dataStore.edit { preferences ->

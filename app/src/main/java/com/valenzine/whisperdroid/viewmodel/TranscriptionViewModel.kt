@@ -2,6 +2,9 @@ package com.valenzine.whisperdroid.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.valenzine.whisperdroid.repository.AppSettings
+import com.valenzine.whisperdroid.repository.FormattedTranscript
+import com.valenzine.whisperdroid.repository.SavedPrompt
 import com.valenzine.whisperdroid.repository.SettingsGateway
 import com.valenzine.whisperdroid.repository.StagedAudio
 import com.valenzine.whisperdroid.repository.TranscriptionGateway
@@ -27,6 +30,8 @@ data class TranscriptionScreenState(
     val formattedText: String = "",
     val selectedFileName: String? = null,
     val historyEntryId: Long? = null,
+    val formattingEntryId: Long? = null,
+    val formattingPromptId: String? = null,
     val phase: TranscriptionUiState = TranscriptionUiState.Idle,
     val error: String? = null,
     val errorDetails: String? = null
@@ -58,7 +63,9 @@ class TranscriptionViewModel(
     val audioErrorMessages = audioErrors.receiveAsFlow()
 
     fun resetState() {
-        if (_screenState.value.phase is TranscriptionUiState.Error) setPhase(TranscriptionUiState.Idle)
+        if (_screenState.value.phase is TranscriptionUiState.Error) {
+            setPhase(TranscriptionUiState.Idle)
+        }
     }
 
     fun restoreLatest() = viewModelScope.launch {
@@ -96,6 +103,13 @@ class TranscriptionViewModel(
     fun clearHistory() = editHistory {
         historyRepository?.clear()
         _screenState.value = TranscriptionScreenState()
+    }
+
+    fun deletePromptResult(entryId: Long, promptId: String) = editHistory {
+        historyRepository?.deletePromptResult(entryId, promptId)
+        if (_screenState.value.historyEntryId == entryId) {
+            historyRepository?.entry(entryId)?.first()?.let(::displayEntry)
+        }
     }
 
     private fun editHistory(edit: suspend () -> Unit) {
@@ -156,7 +170,7 @@ class TranscriptionViewModel(
                 }
             }
             val entryId = if (saved == null) {
-                historyRepository?.saveRaw(audio.sha256, audio.displayName, result)?.id
+                historyRepository?.saveRaw(audio.sha256, audio.displayName, result, audio.sourceOrigin, audio.importedAt)?.id
             } else {
                 historyRepository.replaceTranscription(saved.id, audio.displayName, result)
                 saved.id
@@ -176,13 +190,19 @@ class TranscriptionViewModel(
         }
     }
 
-    fun formatText(): Boolean {
+    fun formatText(promptId: String? = null): Boolean {
         val current = _screenState.value
         if (current.transcription.isBlank() || !operation.tryLock()) return false
-        setPhase(TranscriptionUiState.FormattingText)
+        _screenState.value = current.copy(
+            phase = TranscriptionUiState.FormattingText,
+            formattingEntryId = current.historyEntryId,
+            formattingPromptId = promptId,
+            error = null,
+            errorDetails = null
+        )
         viewModelScope.launch {
             try {
-                formatTextInternal(current.transcription, current.historyEntryId)
+                formatTextInternal(current.transcription, current.historyEntryId, promptId)
             } finally {
                 operation.unlock()
             }
@@ -190,18 +210,72 @@ class TranscriptionViewModel(
         return true
     }
 
-    private suspend fun formatTextInternal(source: String, entryId: Long?) {
+    fun formatHistoryEntry(entryId: Long, promptId: String): Boolean {
+        if (!operation.tryLock()) return false
+        val previousState = _screenState.value
+        _screenState.value = previousState.copy(
+            formattingEntryId = entryId,
+            formattingPromptId = promptId,
+            phase = TranscriptionUiState.FormattingText,
+            error = null,
+            errorDetails = null
+        )
+        viewModelScope.launch {
+            try {
+                val entry = historyRepository?.entry(entryId)?.first()
+                val settings = settingsRepository.settingsFlow.first()
+                val prompt = settings.prompts.firstOrNull { it.id == promptId }
+                if (entry == null || prompt == null || settings.apiKey.isBlank()) {
+                    setError(
+                        when {
+                            settings.apiKey.isBlank() -> "Add an OpenAI API key in Settings before formatting."
+                            entry == null -> "This history entry has been cleared."
+                            else -> "This prompt is no longer available."
+                        }
+                    )
+                    return@launch
+                }
+                val result = formatAndSave(entry.rawText, entryId, settings, prompt)
+                if (_screenState.value.historyEntryId == entryId) {
+                    _screenState.value = _screenState.value.copy(
+                        formattedText = result.text,
+                        formattingEntryId = null,
+                        formattingPromptId = null,
+                        phase = TranscriptionUiState.Success(_screenState.value.transcription, result.text)
+                    )
+                } else {
+                    _screenState.value = previousState.copy(formattingEntryId = null, formattingPromptId = null)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                setError(error.message ?: "Formatting failed", error.message)
+            } finally {
+                operation.unlock()
+            }
+        }
+        return true
+    }
+
+    private suspend fun formatTextInternal(source: String, entryId: Long?, promptId: String? = null) {
         try {
             val settings = settingsRepository.settingsFlow.first()
             if (settings.apiKey.isBlank()) {
                 setError("Add an OpenAI API key in Settings before formatting.")
                 return
             }
-            val result = repository.formatText(source, settings.apiKey, settings.llmPrompt, settings.llmModel)
-            entryId?.let { historyRepository?.saveFormatted(it, result) }
+            val prompt = if (promptId == null) settings.activePrompt else settings.prompts.firstOrNull { it.id == promptId }
+            if (prompt == null) {
+                setError("This prompt is no longer available.")
+                return
+            }
+            _screenState.value = _screenState.value.copy(formattingEntryId = entryId, formattingPromptId = prompt.id)
+            val result = formatAndSave(source, entryId, settings, prompt)
             _screenState.value = _screenState.value.copy(
-                formattedText = result,
-                phase = TranscriptionUiState.Success(source, result),
+                formattedText = result.text,
+                formattingEntryId = null,
+                formattingPromptId = null,
+                phase = TranscriptionUiState.Success(source, result.text),
                 error = null,
                 errorDetails = null
             )
@@ -213,8 +287,27 @@ class TranscriptionViewModel(
         }
     }
 
+    private suspend fun formatAndSave(
+        source: String,
+        entryId: Long?,
+        settings: AppSettings,
+        prompt: SavedPrompt
+    ): FormattedTranscript {
+        val result = repository.formatText(source, settings.apiKey, prompt.content, settings.llmModel)
+        if (entryId != null) {
+            historyRepository?.savePromptResult(entryId, prompt.id, prompt.name, result.text, result.summary)
+        }
+        return result
+    }
+
     private fun setPhase(phase: TranscriptionUiState) {
-        _screenState.value = _screenState.value.copy(phase = phase, error = null, errorDetails = null)
+        _screenState.value = _screenState.value.copy(
+            phase = phase,
+            formattingEntryId = null,
+            formattingPromptId = null,
+            error = null,
+            errorDetails = null
+        )
     }
 
     private fun setError(message: String, details: String? = null) {
