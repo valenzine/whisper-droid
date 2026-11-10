@@ -63,8 +63,8 @@ internal fun MainScreen(
         mutableStateOf(languageOptions.first { languageCodes[it] == audioSession.shareLanguage })
     }
 
-    fun enqueueAudio(uri: Uri, expectedFingerprint: String? = null) {
-        if (audioSession.enqueue(uri, languageCodes[selectedLanguage], expectedFingerprint) == null) {
+    fun enqueueAudio(uri: Uri) {
+        if (audioSession.enqueue(uri, languageCodes[selectedLanguage], isLocalPicker = true) == null) {
             screenScope.launch { snackbarHostState.showSnackbar("The audio queue is full. Select this audio again later.") }
         }
     }

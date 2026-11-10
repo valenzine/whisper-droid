@@ -22,11 +22,13 @@ internal class AudioSession(
     private class Request(
         val staged: Deferred<StagedAudio>,
         val language: String?,
-        val expectedFingerprint: String?
+        val expectedFingerprint: String?,
+        val reusableLocalUri: Uri?
     )
 
     private val slots = Semaphore(2)
     private val requests = Channel<Request>(2)
+    private val reusableLocalUris = mutableMapOf<String, Uri>()
     var shareLanguage: String? = null
 
     init {
@@ -34,6 +36,7 @@ internal class AudioSession(
             for (request in requests) {
                 try {
                     val audio = request.staged.await()
+                    request.reusableLocalUri?.let { reusableLocalUris[audio.sha256] = it }
                     try {
                         process(audio, request.language, request.expectedFingerprint)
                     } finally {
@@ -51,7 +54,7 @@ internal class AudioSession(
     }
 
     /** The receiver can release its URI grant as soon as the returned signal completes. */
-    fun enqueue(uri: Uri, language: String?, expectedFingerprint: String? = null, sourceOrigin: String = "Files"): Deferred<Unit>? {
+    fun enqueue(uri: Uri, language: String?, expectedFingerprint: String? = null, sourceOrigin: String = "Files", isLocalPicker: Boolean = false): Deferred<Unit>? {
         if (!slots.tryAcquire()) return null
 
         val importedAt = System.currentTimeMillis()
@@ -63,8 +66,12 @@ internal class AudioSession(
                 copyFinished.complete(Unit)
             }
         }
-        check(requests.trySend(Request(staged, language, expectedFingerprint)).isSuccess)
+        check(requests.trySend(Request(staged, language, expectedFingerprint, uri.takeIf { isLocalPicker })).isSuccess)
         staged.start()
         return copyFinished
     }
+
+    fun reusableLocalUri(fingerprint: String): Uri? = reusableLocalUris[fingerprint]
+    fun forgetReusableLocalUri(fingerprint: String) { reusableLocalUris.remove(fingerprint) }
+    fun clearReusableLocalUris() { reusableLocalUris.clear() }
 }

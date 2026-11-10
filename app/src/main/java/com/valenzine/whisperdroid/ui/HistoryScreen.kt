@@ -1,8 +1,6 @@
 package com.valenzine.whisperdroid.ui
 
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,12 +29,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,10 +45,12 @@ import androidx.navigation.NavController
 import com.valenzine.whisperdroid.WhisperDroidApplication
 import com.valenzine.whisperdroid.history.TranscriptEntry
 import kotlinx.coroutines.launch
-import java.text.DateFormat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.io.IOException
 import android.text.format.DateFormat as AndroidDateFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,18 +65,6 @@ internal fun HistoryScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var clearAllConfirmation by remember { mutableStateOf(false) }
-    var retranscribeFingerprint by rememberSaveable { mutableStateOf<String?>(null) }
-    val retranscribeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        val fingerprint = retranscribeFingerprint
-        retranscribeFingerprint = null
-        if (uri != null && fingerprint != null) {
-            if (app.audioSession.enqueue(uri, app.audioSession.shareLanguage, fingerprint) == null) {
-                scope.launch { snackbar.showSnackbar("The audio queue is full. Select this audio again later.") }
-            } else {
-                navController.popBackStack()
-            }
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -122,11 +110,18 @@ internal fun HistoryScreen(
                         },
                         onReadRaw = { openReader(entry.id, false) },
                         onReadFormatted = { openReader(entry.id, true) },
-                        onRetranscribe = {
-                            retranscribeFingerprint = entry.audioFingerprint
-                            retranscribeLauncher.launch("audio/*")
+                        reusableUri = { app.audioSession.reusableLocalUri(entry.audioFingerprint) },
+                        onRetranscribe = { uri ->
+                            if (app.audioSession.enqueue(uri, app.audioSession.shareLanguage, entry.audioFingerprint) == null) {
+                                scope.launch { snackbar.showSnackbar("The audio queue is full. Try again later.") }
+                            } else {
+                                navController.popBackStack()
+                            }
                         },
-                        onDelete = { app.transcription.deleteHistoryEntry(entry.id) }
+                        onDelete = {
+                            app.audioSession.forgetReusableLocalUri(entry.audioFingerprint)
+                            app.transcription.deleteHistoryEntry(entry.id)
+                        }
                     )
                 }
             }
@@ -141,6 +136,7 @@ internal fun HistoryScreen(
             confirmButton = {
                 TextButton(onClick = {
                     app.transcription.clearHistory()
+                    app.audioSession.clearReusableLocalUris()
                     clearAllConfirmation = false
                 }) { Text("Clear all") }
             },
@@ -156,11 +152,20 @@ private fun HistoryEntryCard(
     onOpen: () -> Unit,
     onReadRaw: () -> Unit,
     onReadFormatted: () -> Unit,
-    onRetranscribe: () -> Unit,
+    reusableUri: () -> Uri?,
+    onRetranscribe: (Uri) -> Unit,
     onDelete: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         var moreExpanded by remember { mutableStateOf(false) }
+        var reusableAudio by remember(entry.id) { mutableStateOf<Uri?>(null) }
+        val context = LocalContext.current
+        LaunchedEffect(moreExpanded) {
+            reusableAudio = null
+            if (moreExpanded) {
+                reusableUri()?.takeIf { uri -> canReadAudio(context, uri) }?.let { reusableAudio = it }
+            }
+        }
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -179,13 +184,6 @@ private fun HistoryEntryCard(
                         onDismissRequest = { moreExpanded = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Re-transcribe") },
-                            onClick = {
-                                moreExpanded = false
-                                onRetranscribe()
-                            }
-                        )
-                        DropdownMenuItem(
                             text = { Text("Delete") },
                             enabled = !isBusy,
                             onClick = {
@@ -193,6 +191,15 @@ private fun HistoryEntryCard(
                                 onDelete()
                             }
                         )
+                        reusableAudio?.let { uri ->
+                            DropdownMenuItem(
+                                text = { Text("Re-transcribe") },
+                                onClick = {
+                                    moreExpanded = false
+                                    onRetranscribe(uri)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -206,12 +213,22 @@ private fun HistoryEntryCard(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onOpen, enabled = !isBusy) { Text("Open") }
-                TextButton(onClick = onReadRaw) { Text("Read raw") }
+                TextButton(onClick = onReadRaw) { Text("Raw") }
                 if (entry.formattedText.isNotBlank()) {
-                    TextButton(onClick = onReadFormatted) { Text("Read formatted") }
+                    TextButton(onClick = onReadFormatted) { Text("Formatted") }
                 }
             }
         }
+    }
+}
+
+private suspend fun canReadAudio(context: android.content.Context, uri: Uri): Boolean = withContext(Dispatchers.IO) {
+    try {
+        context.contentResolver.openInputStream(uri)?.use { true } ?: false
+    } catch (_: SecurityException) {
+        false
+    } catch (_: IOException) {
+        false
     }
 }
 

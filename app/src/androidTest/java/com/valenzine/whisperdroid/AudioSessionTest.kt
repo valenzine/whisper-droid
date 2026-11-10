@@ -59,4 +59,40 @@ class AudioSessionTest {
             }
         }
     }
+
+    @Test
+    fun remembersOnlyPickerAudioForReTranscription() = runBlocking {
+        withTimeout(5_000) {
+            val cache = InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
+            val scope = CoroutineScope(coroutineContext + SupervisorJob(coroutineContext[Job]))
+            val processed = Channel<String>(2)
+            val localFile = File.createTempFile("picker-audio", ".audio", cache)
+            val sharedFile = File.createTempFile("shared-audio", ".audio", cache)
+            val localUri = Uri.parse("content://files/local")
+            val sharedUri = Uri.parse("content://telegram/shared")
+            try {
+                val session = AudioSession(
+                    scope = scope,
+                    stage = { uri, _, _ ->
+                        val name = requireNotNull(uri.lastPathSegment)
+                        StagedAudio(if (name == "local") localFile else sharedFile, name, name)
+                    },
+                    process = { audio, _, _ -> processed.send(audio.sha256) },
+                    showError = { throw AssertionError(it) }
+                )
+
+                requireNotNull(session.enqueue(localUri, null, isLocalPicker = true)).await()
+                assertEquals("local", processed.receive())
+                assertEquals(localUri, session.reusableLocalUri("local"))
+
+                requireNotNull(session.enqueue(sharedUri, null, sourceOrigin = "Telegram")).await()
+                assertEquals("shared", processed.receive())
+                assertNull(session.reusableLocalUri("shared"))
+            } finally {
+                scope.cancel()
+                localFile.delete()
+                sharedFile.delete()
+            }
+        }
+    }
 }
