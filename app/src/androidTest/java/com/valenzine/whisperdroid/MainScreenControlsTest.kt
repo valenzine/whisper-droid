@@ -19,7 +19,7 @@ class MainScreenControlsTest {
     fun processingControlsExposePromptPillsAndAutoFormatStatus() {
         composeRule.onNodeWithText("Processing").assertIsDisplayed()
         composeRule.onNodeWithText("Format manually when ready").assertIsDisplayed()
-        composeRule.onNodeWithText("Default prompt").assertIsDisplayed()
+        composeRule.onNodeWithText("Tidy up").assertIsDisplayed()
     }
 
     @Test

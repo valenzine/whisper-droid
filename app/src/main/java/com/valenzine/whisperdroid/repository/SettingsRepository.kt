@@ -46,7 +46,7 @@ data class SavedPrompt(
 
 private fun builtInPrompt() = SavedPrompt(
     id = DEFAULT_PROMPT_ID,
-    name = "Default prompt",
+    name = "Tidy up",
     content = DEFAULT_LLM_PROMPT,
     isBuiltIn = true
 )

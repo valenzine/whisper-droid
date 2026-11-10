@@ -88,7 +88,7 @@ class SettingsRepositoryTest {
         repository.updatePrompt(SavedPrompt(DEFAULT_PROMPT_ID, "Changed", "Changed content"))
 
         val default = repository.settingsFlow.first().activePrompt
-        assertEquals("Default prompt", default.name)
+        assertEquals("Tidy up", default.name)
         assertEquals("Changed content", default.content)
         assertEquals(true, default.isBuiltIn)
 
@@ -108,7 +108,7 @@ class SettingsRepositoryTest {
 
         assertEquals(2, prompts.size)
         assertEquals(DEFAULT_PROMPT_ID, prompts.first().id)
-        assertEquals("Default prompt", prompts.first().name)
+        assertEquals("Tidy up", prompts.first().name)
         assertEquals("Changed", prompts.first().content)
         assertEquals(true, prompts.first().isBuiltIn)
         assertEquals("custom", prompts.last().id)
