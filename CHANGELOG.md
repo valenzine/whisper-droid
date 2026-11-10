@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.1] - 2026-11-10
+
+### Added
+- GPT-6 Luna as an optional formatting model.
+
+### Changed
+- Migrate saved GPT-5 nano selections to GPT-5.6 Luna ahead of the GPT-5 nano shutdown.
+
 ## [0.2.0] - 2026-09-08
 ### Added
 - Optional automatic LLM processing and inline prompt editing with persistence.

@@ -380,6 +380,7 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         
         val request = LlmRequest(
             model = model,
+            reasoningEffort = if (model == ModelCatalog.GPT_6_LUNA) "none" else null,
             messages = listOf(
                 Message("system", "You are a direct text formatting engine. Provide ONLY the formatted text requested by the user, with no additional commentary, introductions, or conclusions."),
                 Message("user", userPrompt)
