@@ -15,10 +15,10 @@ class MainScreenControlsTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun processingControlsExpandInline() {
+    fun processingControlsExposeTheActivePromptChooser() {
         composeRule.onNodeWithText("Automatically process after transcription").assertIsDisplayed()
-        composeRule.onNodeWithText("Edit processing prompt").performClick()
-        composeRule.onNodeWithText("Processing instruction").assertIsDisplayed()
-        composeRule.onNodeWithText("Reset to default prompt").assertIsDisplayed()
+        composeRule.onNodeWithText("Active processing prompt").assertIsDisplayed()
+        composeRule.onNodeWithText("Default prompt").assertIsDisplayed()
+        composeRule.onNodeWithText("New prompt").assertIsDisplayed()
     }
 }

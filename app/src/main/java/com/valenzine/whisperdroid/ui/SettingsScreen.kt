@@ -33,7 +33,6 @@ fun SettingsScreen() {
     val settings by viewModel.settings.collectAsState()
 
     var tempApiKey by remember { mutableStateOf("") }
-    var tempLlmPrompt by remember { mutableStateOf("") }
     var tempTranscriptionModel by remember { mutableStateOf(ModelCatalog.DEFAULT_TRANSCRIPTION_MODEL) }
     var tempLlmModel by remember { mutableStateOf(ModelCatalog.DEFAULT_LLM_MODEL) }
     var isModelDropdownExpanded by remember { mutableStateOf(false) }
@@ -46,9 +45,6 @@ fun SettingsScreen() {
     // Keep temp values in sync with ViewModel when they change
     LaunchedEffect(settings.apiKey) {
         tempApiKey = settings.apiKey
-    }
-    LaunchedEffect(settings.llmPrompt) {
-        tempLlmPrompt = settings.llmPrompt
     }
     LaunchedEffect(settings.transcriptionModel) {
         tempTranscriptionModel = settings.transcriptionModel
@@ -182,24 +178,12 @@ fun SettingsScreen() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            TextField(
-                value = tempLlmPrompt,
-                onValueChange = { tempLlmPrompt = it },
-                label = { Text("LLM Instruction (transcribed text will be added automatically)") },
-                placeholder = { Text("Format the following text with paragraphs:") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 120.dp, max = 200.dp),
-                maxLines = 5
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             Button(onClick = {
                 viewModel.save(
                     AppSettings(
                         apiKey = tempApiKey,
-                        llmPrompt = tempLlmPrompt,
+                        prompts = settings.prompts,
+                        activePromptId = settings.activePromptId,
                         transcriptionModel = tempTranscriptionModel,
                         llmModel = tempLlmModel,
                         autoProcess = settings.autoProcess

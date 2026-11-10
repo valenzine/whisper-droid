@@ -90,15 +90,21 @@ internal fun MainScreen(
     val density = androidx.compose.ui.platform.LocalDensity.current
     var promptExpanded by rememberSaveable { mutableStateOf(false) }
     var promptDraft by rememberSaveable { mutableStateOf(appSettings.llmPrompt) }
+    var editingPromptId by rememberSaveable { mutableStateOf(appSettings.activePromptId) }
     var promptFocused by remember { mutableStateOf(false) }
     var clearHistoryConfirmation by remember { mutableStateOf(false) }
+    var promptMenuExpanded by remember { mutableStateOf(false) }
+    var showCreatePrompt by remember { mutableStateOf(false) }
+    var showRenamePrompt by remember { mutableStateOf(false) }
+    var showDeletePrompt by remember { mutableStateOf(false) }
 
-    LaunchedEffect(appSettings.llmPrompt) {
+    LaunchedEffect(appSettings.activePromptId, appSettings.llmPrompt, promptFocused) {
         if (!promptFocused) promptDraft = appSettings.llmPrompt
+        if (!promptFocused) editingPromptId = appSettings.activePromptId
     }
-    LaunchedEffect(promptDraft) {
+    LaunchedEffect(promptDraft, editingPromptId) {
         delay(500)
-        if (promptDraft != appSettings.llmPrompt) settingsViewModel.saveLlmPrompt(promptDraft)
+        settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
     }
     LaunchedEffect(screenState.phase) {
         val phase = screenState.phase
@@ -129,7 +135,7 @@ internal fun MainScreen(
                 horizontalArrangement = Arrangement.End
             ) {
                 IconButton(onClick = {
-                    settingsViewModel.saveLlmPrompt(promptDraft)
+                    settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
                     navController.navigate("settings")
                 }) {
                     Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -192,11 +198,52 @@ internal fun MainScreen(
                             onCheckedChange = settingsViewModel::setAutoProcess
                         )
                     }
-                    TextButton(onClick = {
-                        promptExpanded = !promptExpanded
-                        if (!promptExpanded) settingsViewModel.saveLlmPrompt(promptDraft)
-                    }) {
-                        Text(if (promptExpanded) "Hide editing prompt" else "Edit processing prompt")
+                    ExposedDropdownMenuBox(
+                        expanded = promptMenuExpanded,
+                        onExpandedChange = { promptMenuExpanded = !promptMenuExpanded }
+                    ) {
+                        TextField(
+                            value = appSettings.activePrompt.name,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Active processing prompt") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(promptMenuExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = promptMenuExpanded,
+                            onDismissRequest = { promptMenuExpanded = false }
+                        ) {
+                            appSettings.prompts.forEach { prompt ->
+                                DropdownMenuItem(
+                                    text = { Text(prompt.name) },
+                                    onClick = {
+                                        promptFocused = false
+                                        promptExpanded = false
+                                        settingsViewModel.selectPrompt(prompt.id)
+                                        promptMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = { showCreatePrompt = true }) { Text("New prompt") }
+                        if (!appSettings.activePrompt.isBuiltIn) {
+                            TextButton(onClick = { showRenamePrompt = true }) { Text("Rename") }
+                            TextButton(onClick = { showDeletePrompt = true }) { Text("Delete") }
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (!appSettings.activePrompt.isBuiltIn) {
+                            TextButton(onClick = {
+                                promptExpanded = !promptExpanded
+                                if (!promptExpanded) {
+                                    settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
+                                }
+                            }) {
+                                Text(if (promptExpanded) "Hide editor" else "Edit")
+                            }
+                        }
                     }
                     if (promptExpanded) {
                         OutlinedTextField(
@@ -205,7 +252,9 @@ internal fun MainScreen(
                             label = { Text("Processing instruction") },
                             modifier = Modifier.fillMaxWidth().onFocusChanged {
                                 promptFocused = it.isFocused
-                                if (!it.isFocused) settingsViewModel.saveLlmPrompt(promptDraft)
+                                if (!it.isFocused) {
+                                    settingsViewModel.updatePromptContent(editingPromptId, promptDraft)
+                                }
                             },
                             minLines = 4
                         )
@@ -435,6 +484,86 @@ internal fun MainScreen(
             dismissButton = { TextButton(onClick = { clearHistoryConfirmation = false }) { Text("Cancel") } }
         )
     }
+
+    if (showCreatePrompt) {
+        PromptDialog(
+            title = "New prompt",
+            initialName = "",
+            initialContent = DEFAULT_LLM_PROMPT,
+            confirmLabel = "Create",
+            onDismiss = { showCreatePrompt = false },
+            onConfirm = { name, content ->
+                settingsViewModel.createPrompt(name, content)
+                showCreatePrompt = false
+                promptExpanded = false
+            }
+        )
+    }
+    if (showRenamePrompt) {
+        PromptDialog(
+            title = "Rename prompt",
+            initialName = appSettings.activePrompt.name,
+            initialContent = appSettings.activePrompt.content,
+            confirmLabel = "Save",
+            showContent = false,
+            onDismiss = { showRenamePrompt = false },
+            onConfirm = { name, _ ->
+                settingsViewModel.updatePrompt(appSettings.activePrompt.copy(name = name))
+                showRenamePrompt = false
+            }
+        )
+    }
+    if (showDeletePrompt) {
+        AlertDialog(
+            onDismissRequest = { showDeletePrompt = false },
+            title = { Text("Delete prompt?") },
+            text = { Text("${appSettings.activePrompt.name} will no longer be available for processing.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    settingsViewModel.deletePrompt(appSettings.activePrompt.id)
+                    showDeletePrompt = false
+                    promptExpanded = false
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { showDeletePrompt = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun PromptDialog(
+    title: String,
+    initialName: String,
+    initialContent: String,
+    confirmLabel: String,
+    showContent: Boolean = true,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    var content by remember(initialContent) { mutableStateOf(initialContent) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") })
+                if (showContent) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = content,
+                        onValueChange = { content = it },
+                        label = { Text("Processing instruction") },
+                        minLines = 4
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name, content) }, enabled = name.isNotBlank()) { Text(confirmLabel) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 // Helper function to format file size
