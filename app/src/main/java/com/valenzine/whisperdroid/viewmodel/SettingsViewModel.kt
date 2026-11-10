@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.valenzine.whisperdroid.repository.AppSettings
 import com.valenzine.whisperdroid.repository.SettingsRepository
+import com.valenzine.whisperdroid.repository.SavedPrompt
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -18,5 +19,9 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
 
     fun save(settings: AppSettings) = viewModelScope.launch { repository.saveSettings(settings) }
     fun saveLlmPrompt(prompt: String) = viewModelScope.launch { repository.saveLlmPrompt(prompt) }
+    fun selectPrompt(id: String) = viewModelScope.launch { repository.selectPrompt(id) }
+    fun createPrompt(name: String, content: String) = viewModelScope.launch { repository.createPrompt(name, content) }
+    fun updatePrompt(prompt: SavedPrompt) = viewModelScope.launch { repository.updatePrompt(prompt) }
+    fun deletePrompt(id: String) = viewModelScope.launch { repository.deletePrompt(id) }
     fun setAutoProcess(enabled: Boolean) = viewModelScope.launch { repository.saveAutoProcess(enabled) }
 }

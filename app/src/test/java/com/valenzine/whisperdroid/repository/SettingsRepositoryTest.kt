@@ -37,7 +37,11 @@ class SettingsRepositoryTest {
 
         repository.saveSettings(expected)
 
-        assertEquals(expected, repository.settingsFlow.first())
+        val actual = repository.settingsFlow.first()
+        assertEquals(expected.apiKey, actual.apiKey)
+        assertEquals(expected.transcriptionModel, actual.transcriptionModel)
+        assertEquals("migrated", actual.activePromptId)
+        assertEquals(expected.llmPrompt, actual.llmPrompt)
     }
 
     @Test
@@ -84,6 +88,26 @@ class SettingsRepositoryTest {
         assertEquals("gpt-5.6-luna", migrated[model])
         assertEquals("Keep my wording.", migrated[prompt])
         assertEquals(false, RetiredLlmModelMigration.shouldMigrate(migrated))
+    }
+
+    @Test
+    fun savedPromptsCanBeSelectedEditedAndDeletedWithoutRemovingTheDefault() = runTest {
+        val repository = newRepository()
+
+        repository.createPrompt("Meeting notes", "Write concise meeting notes.")
+        val created = repository.settingsFlow.first()
+        val custom = created.activePrompt
+        assertEquals("Meeting notes", custom.name)
+        assertEquals("Write concise meeting notes.", created.llmPrompt)
+
+        repository.updatePrompt(custom.copy(name = "Notes", content = "Keep the speaker's style."))
+        assertEquals("Keep the speaker's style.", repository.settingsFlow.first().llmPrompt)
+
+        repository.deletePrompt(custom.id)
+        val deleted = repository.settingsFlow.first()
+        assertEquals(DEFAULT_PROMPT_ID, deleted.activePromptId)
+        assertEquals(DEFAULT_LLM_PROMPT, deleted.llmPrompt)
+        assertEquals(1, deleted.prompts.size)
     }
 
     private fun TestScope.newRepository(): SettingsRepository {
