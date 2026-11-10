@@ -1,6 +1,7 @@
 package com.valenzine.whisperdroid
 
 import android.content.ContentResolver
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -40,7 +41,7 @@ class ShareReceiverActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 staged.await()
                 startActivity(
-                    Intent(this@ShareReceiverActivity, MainActivity::class.java)
+                    Intent.makeMainActivity(ComponentName(this@ShareReceiverActivity, MainActivity::class.java))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
                 finish()
