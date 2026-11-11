@@ -190,10 +190,11 @@ class TranscriptionViewModel(
         }
     }
 
-    fun formatText(promptId: String? = null): Boolean {
+    fun formatText(promptId: String? = null, customPrompt: String? = null): Boolean {
         val current = _screenState.value
-        if (current.transcription.isBlank() || !operation.tryLock()) return false
+        if (current.transcription.isBlank() || customPrompt?.isBlank() == true || !operation.tryLock()) return false
         _screenState.value = current.copy(
+            formattedText = if (customPrompt != null) "" else current.formattedText,
             phase = TranscriptionUiState.FormattingText,
             formattingEntryId = current.historyEntryId,
             formattingPromptId = promptId,
@@ -202,7 +203,7 @@ class TranscriptionViewModel(
         )
         viewModelScope.launch {
             try {
-                formatTextInternal(current.transcription, current.historyEntryId, promptId)
+                formatTextInternal(current.transcription, current.historyEntryId, promptId, customPrompt)
             } finally {
                 operation.unlock()
             }
@@ -257,20 +258,34 @@ class TranscriptionViewModel(
         return true
     }
 
-    private suspend fun formatTextInternal(source: String, entryId: Long?, promptId: String? = null) {
+    private suspend fun formatTextInternal(
+        source: String,
+        entryId: Long?,
+        promptId: String? = null,
+        customPrompt: String? = null
+    ) {
         try {
             val settings = settingsRepository.settingsFlow.first()
             if (settings.apiKey.isBlank()) {
                 setError("Add an OpenAI API key in Settings before formatting.")
                 return
             }
-            val prompt = if (promptId == null) settings.activePrompt else settings.prompts.firstOrNull { it.id == promptId }
-            if (prompt == null) {
+            val prompt = if (customPrompt == null) {
+                if (promptId == null) settings.activePrompt else settings.prompts.firstOrNull { it.id == promptId }
+            } else null
+            if (customPrompt == null && prompt == null) {
                 setError("This prompt is no longer available.")
                 return
             }
-            _screenState.value = _screenState.value.copy(formattingEntryId = entryId, formattingPromptId = prompt.id)
-            val result = formatAndSave(source, entryId, settings, prompt)
+            _screenState.value = _screenState.value.copy(
+                formattingEntryId = entryId,
+                formattingPromptId = prompt?.id
+            )
+            val result = if (customPrompt == null) {
+                formatAndSave(source, entryId, settings, requireNotNull(prompt))
+            } else {
+                repository.formatText(source, settings.apiKey, customPrompt, settings.llmModel)
+            }
             _screenState.value = _screenState.value.copy(
                 formattedText = result.text,
                 formattingEntryId = null,

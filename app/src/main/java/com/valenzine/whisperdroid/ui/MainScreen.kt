@@ -97,6 +97,9 @@ internal fun MainScreen(
     }.collectAsState(initial = emptyList())
     val promptResults = allPromptResults.filter { it.entryId == currentEntry }
     var pendingPromptId by rememberSaveable { mutableStateOf<String?>(null) }
+    var customPromptDialogOpen by remember(currentEntry) { mutableStateOf(false) }
+    var customPromptDraft by remember(currentEntry) { mutableStateOf("") }
+    var customPromptSelected by remember(currentEntry) { mutableStateOf(false) }
     val selectedPromptId = pendingPromptId
         ?.takeIf { id -> appSettings.prompts.any { it.id == id } }
         ?: appSettings.activePromptId
@@ -211,8 +214,9 @@ internal fun MainScreen(
                 ) {
                     appSettings.prompts.forEach { prompt ->
                         FilterChip(
-                            selected = prompt.id == selectedPromptId,
+                            selected = !customPromptSelected && prompt.id == selectedPromptId,
                             onClick = {
+                                customPromptSelected = false
                                 if (pendingPromptId != null || prompt.id != appSettings.activePromptId) {
                                     pendingPromptId = prompt.id
                                     settingsViewModel.selectPrompt(prompt.id)
@@ -224,6 +228,43 @@ internal fun MainScreen(
                             modifier = Modifier.widthIn(max = 160.dp)
                         )
                     }
+                    FilterChip(
+                        selected = customPromptSelected,
+                        onClick = { customPromptDialogOpen = true },
+                        label = { Text("Custom") },
+                        shape = CircleShape
+                    )
+                }
+
+                if (customPromptDialogOpen) {
+                    AlertDialog(
+                        onDismissRequest = { customPromptDialogOpen = false },
+                        title = { Text("Custom prompt") },
+                        text = {
+                            OutlinedTextField(
+                                value = customPromptDraft,
+                                onValueChange = { customPromptDraft = it },
+                                label = { Text("Processing instruction") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 3
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                enabled = customPromptDraft.isNotBlank() && transcription.isNotBlank() && !screenState.isBusy,
+                                onClick = {
+                                    if (viewModel.formatText(customPrompt = customPromptDraft)) {
+                                        customPromptSelected = true
+                                        selectedTab = true
+                                        customPromptDialogOpen = false
+                                    }
+                                }
+                            ) { Text("Run") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { customPromptDialogOpen = false }) { Text("Cancel") }
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -231,15 +272,18 @@ internal fun MainScreen(
                 key(isEdited, currentEntry, selectedPromptId.takeIf { isEdited }) {
                     TranscriptPane(
                         rawText = transcription,
-                        editedText = selectedResult?.formattedText.orEmpty(),
+                        editedText = if (customPromptSelected) formattedText else selectedResult?.formattedText.orEmpty(),
                         selectedEdited = isEdited,
                         onSelectFormatted = { selectedTab = it },
                         textHeight = textHeight,
-                        onExpand = currentEntry?.let { id ->
+                        onExpand = currentEntry?.takeUnless { customPromptSelected }?.let { id ->
                             { openReader(id, isEdited, selectedPromptId.takeIf { isEdited }) }
                         },
                         onFormat = {
-                            viewModel.formatText(selectedPromptId).also { started ->
+                            viewModel.formatText(
+                                promptId = selectedPromptId,
+                                customPrompt = customPromptDraft.takeIf { customPromptSelected }
+                            ).also { started ->
                                 if (started && !isEdited) selectedTab = null
                             }
                         },

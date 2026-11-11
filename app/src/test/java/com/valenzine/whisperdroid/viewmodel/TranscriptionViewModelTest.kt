@@ -107,6 +107,21 @@ class TranscriptionViewModelTest {
     }
 
     @Test
+    fun customPromptFormatsWithoutChangingSavedPromptSelection() = runTest {
+        val gateway = RecordingGateway(CompletableDeferred("raw dictation"))
+        val settings = FakeSettings()
+        val viewModel = TranscriptionViewModel(gateway, settings)
+        viewModel.processStagedAudio(audio)
+
+        assertTrue(viewModel.formatText(customPrompt = "Return three bullets."))
+        advanceUntilIdle()
+
+        assertEquals("Return three bullets.", gateway.lastPrompt)
+        assertEquals("test-prompt", settings.settingsFlow.value.activePromptId)
+        assertEquals(listOf("test-prompt"), settings.settingsFlow.value.prompts.map { it.id })
+    }
+
+    @Test
     fun formattingIsRejectedWhenTranscriptIsEmpty() = runTest {
         val gateway = RecordingGateway()
         val viewModel = TranscriptionViewModel(gateway, FakeSettings())

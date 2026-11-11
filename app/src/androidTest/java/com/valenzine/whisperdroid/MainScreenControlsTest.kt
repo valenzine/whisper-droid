@@ -19,6 +19,10 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.valenzine.whisperdroid.repository.AppSettings
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -32,7 +36,26 @@ class MainScreenControlsTest {
     @Test
     fun promptPillsStayOnMainScreen() {
         composeRule.onNodeWithText("Tidy up").assertIsDisplayed()
+        composeRule.onNodeWithText("Custom").assertIsDisplayed()
         composeRule.onNodeWithText("Edit new transcripts automatically").assertDoesNotExist()
+    }
+
+    @Test
+    fun customPromptDialogRequiresTranscriptAndCancelLeavesSettingsUntouched() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as WhisperDroidApplication
+        val before: AppSettings = runBlocking { app.settings.settingsFlow.first() }
+
+        composeRule.onNodeWithText("Custom").performClick()
+        composeRule.onNodeWithText("Custom prompt").assertIsDisplayed()
+        val run = composeRule.onNodeWithText("Run")
+        run.assertIsNotEnabled()
+        composeRule.onNode(hasSetTextAction() and hasText("Processing instruction"))
+            .performTextReplacement("Return a haiku.")
+        run.assertIsNotEnabled()
+        composeRule.onNodeWithText("Cancel").performClick()
+        composeRule.onNodeWithText("Custom prompt").assertDoesNotExist()
+
+        assertTrue(before == runBlocking { app.settings.settingsFlow.first() })
     }
 
     @Test
