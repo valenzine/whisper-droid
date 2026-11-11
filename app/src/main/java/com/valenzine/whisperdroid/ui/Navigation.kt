@@ -5,6 +5,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import com.valenzine.whisperdroid.viewmodel.TranscriptionUiState
 import androidx.compose.runtime.produceState
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -18,6 +23,27 @@ import com.valenzine.whisperdroid.history.PREVIOUS_RESULT_PROMPT_ID
 @Composable
 internal fun Navigation(app: WhisperDroidApplication) {
     val navController = rememberNavController()
+    val transcriptionState by app.transcription.screenState.collectAsState()
+    val confirmation = transcriptionState.phase as? TranscriptionUiState.AwaitingAudioConfirmation
+    if (confirmation != null) {
+        AlertDialog(
+            onDismissRequest = { app.transcription.confirmSharedAudio(false) },
+            title = { Text("Transcribe shared audio?") },
+            text = {
+                Text(if (confirmation.durationMillis == null || confirmation.durationMillis <= 0) {
+                    "The duration of ${confirmation.fileName} could not be determined. Upload it for transcription?"
+                } else {
+                    "${confirmation.fileName} is longer than five minutes. Upload it for transcription?"
+                })
+            },
+            confirmButton = {
+                TextButton(onClick = { app.transcription.confirmSharedAudio(true) }) { Text("Transcribe") }
+            },
+            dismissButton = {
+                TextButton(onClick = { app.transcription.confirmSharedAudio(false) }) { Text("Cancel") }
+            }
+        )
+    }
     val currentEntry by navController.currentBackStackEntryAsState()
     NavHost(navController = navController, startDestination = "main") {
         composable("main") {

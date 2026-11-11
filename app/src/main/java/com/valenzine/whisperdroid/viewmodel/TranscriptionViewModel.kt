@@ -11,6 +11,7 @@ import com.valenzine.whisperdroid.repository.TranscriptionGateway
 import com.valenzine.whisperdroid.history.TranscriptHistoryRepository
 import com.valenzine.whisperdroid.history.TranscriptEntry
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -45,6 +46,7 @@ sealed interface TranscriptionUiState {
     data class TranscodingFile(val fileName: String, val fromFormat: String, val toFormat: String) : TranscriptionUiState
     data class UploadingFile(val fileName: String, val model: String) : TranscriptionUiState
     object Loading : TranscriptionUiState
+    data class AwaitingAudioConfirmation(val fileName: String, val durationMillis: Long?) : TranscriptionUiState
     object WaitingForApiKey : TranscriptionUiState
     object FormattingText : TranscriptionUiState
     data class Success(val transcription: String, val formattedText: String? = null) : TranscriptionUiState
@@ -59,6 +61,11 @@ class TranscriptionViewModel(
     private val _screenState = MutableStateFlow(TranscriptionScreenState())
     val screenState: StateFlow<TranscriptionScreenState> = _screenState
     private val operation = Mutex()
+    private var audioConfirmation: CompletableDeferred<Boolean>? = null
+
+    fun confirmSharedAudio(approved: Boolean) {
+        audioConfirmation?.complete(approved)
+    }
     private val audioErrors = Channel<String>(Channel.BUFFERED)
     val audioErrorMessages = audioErrors.receiveAsFlow()
 
@@ -136,6 +143,7 @@ class TranscriptionViewModel(
         language: String? = null,
         expectedFingerprint: String? = null
     ) = operation.withLock {
+        val previousState = _screenState.value
         setPhase(TranscriptionUiState.Loading)
         try {
             if (expectedFingerprint != null && expectedFingerprint != audio.sha256) {
@@ -150,6 +158,21 @@ class TranscriptionViewModel(
             if (expectedFingerprint != null && saved == null) {
                 setError("This history entry has been cleared.")
                 return@withLock
+            }
+            if (audio.isShared && (audio.durationMillis == null || audio.durationMillis <= 0 || audio.durationMillis > 300_000)) {
+                val confirmation = CompletableDeferred<Boolean>()
+                audioConfirmation = confirmation
+                setPhase(TranscriptionUiState.AwaitingAudioConfirmation(audio.displayName, audio.durationMillis))
+                val approved = try {
+                    confirmation.await()
+                } finally {
+                    audioConfirmation = null
+                }
+                if (!approved) {
+                    _screenState.value = previousState
+                    return@withLock
+                }
+                setPhase(TranscriptionUiState.Loading)
             }
             var settings = settingsRepository.settingsFlow.first()
             if (settings.apiKey.isBlank()) {

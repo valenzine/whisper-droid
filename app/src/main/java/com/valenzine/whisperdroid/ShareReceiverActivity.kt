@@ -31,7 +31,7 @@ class ShareReceiverActivity : ComponentActivity() {
             return
         }
         val session = (application as WhisperDroidApplication).audioSession
-        val staged = intake.receive { session.enqueue(uri, session.shareLanguage, sourceOrigin = sourceOrigin(uri)) }
+        val staged = intake.receive { session.enqueue(uri, session.shareLanguage, sourceOrigin = sourceOrigin(uri), isShared = true) }
         if (staged == null) {
             Toast.makeText(this, "The audio queue is full. Share this audio again later.", Toast.LENGTH_LONG).show()
             finish()

@@ -2,7 +2,6 @@ package com.valenzine.whisperdroid.repository
 
 import android.content.Context
 import android.net.Uri
-import android.provider.OpenableColumns
 import com.valenzine.whisperdroid.model.ModelCatalog
 import com.valenzine.whisperdroid.networking.*
 import kotlinx.coroutines.Dispatchers
@@ -17,9 +16,6 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
-import java.io.FileOutputStream
-import java.util.UUID
-import java.security.MessageDigest
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -28,8 +24,15 @@ data class StagedAudio(
     val displayName: String,
     val sha256: String,
     val sourceOrigin: String = "Audio",
-    val importedAt: Long = System.currentTimeMillis()
-)
+    val importedAt: Long = System.currentTimeMillis(),
+    val durationMillis: Long? = null,
+    val isShared: Boolean = false
+) {
+    internal fun deleteTemporaryFile() {
+        file.delete()
+        file.parentFile?.takeIf { it.name.startsWith("import-") }?.delete()
+    }
+}
 
 data class FormattedTranscript(val text: String, val summary: String)
 
@@ -48,9 +51,10 @@ interface TranscriptionGateway {
 class TranscriptionRepository(context: Context) : TranscriptionGateway {
     private val context = context.applicationContext
     private val stagingDirectory = File(this.context.cacheDir, "staged-audio")
+    private val audioImporter = AudioImporter(this.context, stagingDirectory)
 
     internal fun clearAbandonedAudio() {
-        stagingDirectory.listFiles()?.forEach { it.delete() }
+        stagingDirectory.listFiles()?.forEach { it.deleteRecursively() }
     }
 
     private val transcriptionApi: TranscriptionApi
@@ -221,59 +225,8 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         transcribeFile(stagedAudio.file, apiKey, model, language, onProgress)
     }
 
-    internal suspend fun stageUri(uri: Uri, sourceOrigin: String = "Audio", importedAt: Long = System.currentTimeMillis()): StagedAudio = withContext(Dispatchers.IO) {
-        val metadata = context.contentResolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-            null,
-            null,
-            null
-        )?.use { cursor ->
-            if (!cursor.moveToFirst()) return@use null
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-            val name = nameIndex.takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getString)
-            val size = sizeIndex.takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getLong)
-            name to size
-        }
-        val displayName = metadata?.first ?: "audio"
-        val declaredSize = metadata?.second
-        require(declaredSize == null || declaredSize <= MAX_UPLOAD_BYTES) { "File too large (max 25 MB)" }
-        val extension = displayName.substringAfterLast('.', "")
-            .lowercase()
-            .replace(Regex("[^a-z0-9]"), "")
-            .take(16)
-        val suffix = if (extension.isNotBlank()) ".${extension}" else ".audio"
-        stagingDirectory.mkdirs()
-        val temporary = File.createTempFile("audio-${UUID.randomUUID()}-", suffix, stagingDirectory)
-        try {
-            val digest = MessageDigest.getInstance("SHA-256")
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(temporary).use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    var copied = 0L
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        copied += count
-                        require(copied <= MAX_UPLOAD_BYTES) { "File too large (max 25 MB)" }
-                        output.write(buffer, 0, count)
-                        digest.update(buffer, 0, count)
-                    }
-                }
-            } ?: error("Could not open selected audio file")
-            StagedAudio(
-                file = temporary,
-                displayName = displayName,
-                sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) },
-                sourceOrigin = sourceOrigin,
-                importedAt = importedAt
-            )
-        } catch (error: Throwable) {
-            temporary.delete()
-            throw error
-        }
-    }
+    internal suspend fun stageUri(uri: Uri, sourceOrigin: String = "Audio", importedAt: Long = System.currentTimeMillis()): StagedAudio =
+        audioImporter.stage(uri, sourceOrigin, importedAt)
 
     private suspend fun transcribeFile(
         file: File,
@@ -441,7 +394,4 @@ class TranscriptionRepository(context: Context) : TranscriptionGateway {
         return FormattedTranscript(formattedText, summary)
     }
     
-    private companion object {
-        const val MAX_UPLOAD_BYTES = 25L * 1024L * 1024L
-    }
 }
