@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.1] - 2026-11-11
+
+### Added
+- A Custom action for one-off editing instructions, without saving the prompt or its result to history (#17).
+- Confirmation before uploading shared audio longer than five minutes or with an unknown duration (#18).
+
+### Fixed
+- Time out stalled audio imports, cancel provider reads, remove partial files, and keep the queue moving (#19).
+- Show complete summaries in history instead of cutting them off after two lines (#20).
+
 ## [0.3.0] - 2026-11-10
 
 ### Added
