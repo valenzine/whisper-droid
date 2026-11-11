@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 - Time out stalled audio imports, cancel provider reads, remove partial files, and keep the queue moving (#19).
 - Show complete summaries in history instead of cutting them off after two lines (#20).
+- Keep temporary Custom edits accessible after screen recreation and returning from Settings.
 
 ## [0.3.0] - 2026-11-10
 

@@ -40,6 +40,17 @@ data class TranscriptionScreenState(
     val isBusy: Boolean get() = phase !is TranscriptionUiState.Idle && phase !is TranscriptionUiState.Success && phase !is TranscriptionUiState.Error
 }
 
+/** In-memory only; custom prompts and their output must never reach persistent storage. */
+data class CustomPromptState(
+    val transcription: String? = null,
+    val historyEntryId: Long? = null,
+    val prompt: String = "",
+    val isSelected: Boolean = false
+) {
+    fun belongsTo(screen: TranscriptionScreenState): Boolean =
+        transcription == screen.transcription && historyEntryId == screen.historyEntryId
+}
+
 sealed interface TranscriptionUiState {
     object Idle : TranscriptionUiState
     data class PreparingFile(val fileName: String, val fileSize: Long) : TranscriptionUiState
@@ -60,6 +71,8 @@ class TranscriptionViewModel(
 ) : ViewModel() {
     private val _screenState = MutableStateFlow(TranscriptionScreenState())
     val screenState: StateFlow<TranscriptionScreenState> = _screenState
+    private val _customPromptState = MutableStateFlow(CustomPromptState())
+    val customPromptState: StateFlow<CustomPromptState> = _customPromptState
     private val operation = Mutex()
     private var audioConfirmation: CompletableDeferred<Boolean>? = null
 
@@ -93,6 +106,7 @@ class TranscriptionViewModel(
     }
 
     private fun displayEntry(entry: TranscriptEntry) {
+        clearCustomPrompt()
         _screenState.value = TranscriptionScreenState(
             transcription = entry.rawText,
             formattedText = entry.formattedText,
@@ -104,12 +118,24 @@ class TranscriptionViewModel(
 
     fun deleteHistoryEntry(id: Long) = editHistory {
         historyRepository?.delete(id)
-        if (_screenState.value.historyEntryId == id) _screenState.value = TranscriptionScreenState()
+        if (_screenState.value.historyEntryId == id) {
+            clearCustomPrompt()
+            _screenState.value = TranscriptionScreenState()
+        }
     }
 
     fun clearHistory() = editHistory {
         historyRepository?.clear()
+        clearCustomPrompt()
         _screenState.value = TranscriptionScreenState()
+    }
+
+    fun updateCustomPromptDraft(prompt: String) {
+        _customPromptState.value = _customPromptState.value.copy(prompt = prompt)
+    }
+
+    fun clearCustomPrompt() {
+        _customPromptState.value = CustomPromptState()
     }
 
     fun deletePromptResult(entryId: Long, promptId: String) = editHistory {
@@ -199,6 +225,7 @@ class TranscriptionViewModel(
                 saved.id
             }
             val autoProcess = settingsRepository.settingsFlow.first().autoProcess && result.isNotBlank()
+            clearCustomPrompt()
             _screenState.value = TranscriptionScreenState(
                 transcription = result,
                 selectedFileName = audio.displayName,
@@ -216,6 +243,16 @@ class TranscriptionViewModel(
     fun formatText(promptId: String? = null, customPrompt: String? = null): Boolean {
         val current = _screenState.value
         if (current.transcription.isBlank() || customPrompt?.isBlank() == true || !operation.tryLock()) return false
+        if (customPrompt != null) {
+            _customPromptState.value = CustomPromptState(
+                transcription = current.transcription,
+                historyEntryId = current.historyEntryId,
+                prompt = customPrompt,
+                isSelected = true
+            )
+        } else {
+            clearCustomPrompt()
+        }
         _screenState.value = current.copy(
             formattedText = if (customPrompt != null) "" else current.formattedText,
             phase = TranscriptionUiState.FormattingText,
@@ -237,6 +274,7 @@ class TranscriptionViewModel(
     fun formatHistoryEntry(entryId: Long, promptId: String): Boolean {
         if (!operation.tryLock()) return false
         val previousState = _screenState.value
+        if (previousState.historyEntryId == entryId) clearCustomPrompt()
         _screenState.value = previousState.copy(
             formattingEntryId = entryId,
             formattingPromptId = promptId,

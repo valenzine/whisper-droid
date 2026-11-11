@@ -119,6 +119,27 @@ class TranscriptionViewModelTest {
         assertEquals("Return three bullets.", gateway.lastPrompt)
         assertEquals("test-prompt", settings.settingsFlow.value.activePromptId)
         assertEquals(listOf("test-prompt"), settings.settingsFlow.value.prompts.map { it.id })
+        assertTrue(viewModel.customPromptState.value.isSelected)
+        assertTrue(viewModel.customPromptState.value.belongsTo(viewModel.screenState.value))
+        assertEquals("Return three bullets.", viewModel.customPromptState.value.prompt)
+
+        assertTrue(viewModel.formatText())
+        advanceUntilIdle()
+        assertFalse(viewModel.customPromptState.value.isSelected)
+    }
+
+    @Test
+    fun customPromptStateClearsForANewTranscription() = runTest {
+        val gateway = RecordingGateway(CompletableDeferred("raw dictation"))
+        val viewModel = TranscriptionViewModel(gateway, FakeSettings())
+        viewModel.processStagedAudio(audio)
+        assertTrue(viewModel.formatText(customPrompt = "Return three bullets."))
+        advanceUntilIdle()
+
+        viewModel.processStagedAudio(audio.copy(sha256 = "next-fingerprint"))
+
+        assertFalse(viewModel.customPromptState.value.isSelected)
+        assertFalse(viewModel.customPromptState.value.belongsTo(viewModel.screenState.value))
     }
 
     @Test
