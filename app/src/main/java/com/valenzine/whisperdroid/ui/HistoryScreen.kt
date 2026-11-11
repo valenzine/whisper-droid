@@ -208,9 +208,7 @@ private fun HistoryEntryCard(
             if (entry.summary.isNotBlank()) {
                 Text(
                     entry.summary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
