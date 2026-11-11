@@ -33,6 +33,10 @@
                 <data android:mimeType="audio/*" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".repository.AudioImportService"
+            android:exported="false"
+            android:process=":audio_import" />
     </application>
 
 </manifest>

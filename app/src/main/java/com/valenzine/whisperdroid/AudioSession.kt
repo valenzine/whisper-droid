@@ -10,6 +10,8 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 
 /** Reserves one running and one waiting audio slot, including while a share is being copied. */
@@ -40,10 +42,11 @@ internal class AudioSession(
                     try {
                         process(audio, request.language, request.expectedFingerprint)
                     } finally {
-                        audio.file.delete()
+                        audio.deleteTemporaryFile()
                     }
                 } catch (error: CancellationException) {
-                    throw error
+                    currentCoroutineContext().ensureActive()
+                    showError(java.io.IOException("Audio import timed out. Please try again.", error))
                 } catch (error: Exception) {
                     showError(error)
                 } finally {
@@ -54,14 +57,14 @@ internal class AudioSession(
     }
 
     /** The receiver can release its URI grant as soon as the returned signal completes. */
-    fun enqueue(uri: Uri, language: String?, expectedFingerprint: String? = null, sourceOrigin: String = "Files", isLocalPicker: Boolean = false): Deferred<Unit>? {
+    fun enqueue(uri: Uri, language: String?, expectedFingerprint: String? = null, sourceOrigin: String = "Files", isLocalPicker: Boolean = false, isShared: Boolean = false): Deferred<Unit>? {
         if (!slots.tryAcquire()) return null
 
         val importedAt = System.currentTimeMillis()
         val copyFinished = CompletableDeferred<Unit>()
         val staged = scope.async(start = CoroutineStart.LAZY) {
             try {
-                stage(uri, sourceOrigin, importedAt)
+                stage(uri, sourceOrigin, importedAt).copy(isShared = isShared)
             } finally {
                 copyFinished.complete(Unit)
             }

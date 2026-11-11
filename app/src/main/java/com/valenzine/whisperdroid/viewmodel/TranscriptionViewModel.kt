@@ -11,6 +11,7 @@ import com.valenzine.whisperdroid.repository.TranscriptionGateway
 import com.valenzine.whisperdroid.history.TranscriptHistoryRepository
 import com.valenzine.whisperdroid.history.TranscriptEntry
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,12 +40,24 @@ data class TranscriptionScreenState(
     val isBusy: Boolean get() = phase !is TranscriptionUiState.Idle && phase !is TranscriptionUiState.Success && phase !is TranscriptionUiState.Error
 }
 
+/** In-memory only; custom prompts and their output must never reach persistent storage. */
+data class CustomPromptState(
+    val transcription: String? = null,
+    val historyEntryId: Long? = null,
+    val prompt: String = "",
+    val isSelected: Boolean = false
+) {
+    fun belongsTo(screen: TranscriptionScreenState): Boolean =
+        transcription == screen.transcription && historyEntryId == screen.historyEntryId
+}
+
 sealed interface TranscriptionUiState {
     object Idle : TranscriptionUiState
     data class PreparingFile(val fileName: String, val fileSize: Long) : TranscriptionUiState
     data class TranscodingFile(val fileName: String, val fromFormat: String, val toFormat: String) : TranscriptionUiState
     data class UploadingFile(val fileName: String, val model: String) : TranscriptionUiState
     object Loading : TranscriptionUiState
+    data class AwaitingAudioConfirmation(val fileName: String, val durationMillis: Long?) : TranscriptionUiState
     object WaitingForApiKey : TranscriptionUiState
     object FormattingText : TranscriptionUiState
     data class Success(val transcription: String, val formattedText: String? = null) : TranscriptionUiState
@@ -58,7 +71,14 @@ class TranscriptionViewModel(
 ) : ViewModel() {
     private val _screenState = MutableStateFlow(TranscriptionScreenState())
     val screenState: StateFlow<TranscriptionScreenState> = _screenState
+    private val _customPromptState = MutableStateFlow(CustomPromptState())
+    val customPromptState: StateFlow<CustomPromptState> = _customPromptState
     private val operation = Mutex()
+    private var audioConfirmation: CompletableDeferred<Boolean>? = null
+
+    fun confirmSharedAudio(approved: Boolean) {
+        audioConfirmation?.complete(approved)
+    }
     private val audioErrors = Channel<String>(Channel.BUFFERED)
     val audioErrorMessages = audioErrors.receiveAsFlow()
 
@@ -86,6 +106,7 @@ class TranscriptionViewModel(
     }
 
     private fun displayEntry(entry: TranscriptEntry) {
+        clearCustomPrompt()
         _screenState.value = TranscriptionScreenState(
             transcription = entry.rawText,
             formattedText = entry.formattedText,
@@ -97,12 +118,24 @@ class TranscriptionViewModel(
 
     fun deleteHistoryEntry(id: Long) = editHistory {
         historyRepository?.delete(id)
-        if (_screenState.value.historyEntryId == id) _screenState.value = TranscriptionScreenState()
+        if (_screenState.value.historyEntryId == id) {
+            clearCustomPrompt()
+            _screenState.value = TranscriptionScreenState()
+        }
     }
 
     fun clearHistory() = editHistory {
         historyRepository?.clear()
+        clearCustomPrompt()
         _screenState.value = TranscriptionScreenState()
+    }
+
+    fun updateCustomPromptDraft(prompt: String) {
+        _customPromptState.value = _customPromptState.value.copy(prompt = prompt)
+    }
+
+    fun clearCustomPrompt() {
+        _customPromptState.value = CustomPromptState()
     }
 
     fun deletePromptResult(entryId: Long, promptId: String) = editHistory {
@@ -136,6 +169,7 @@ class TranscriptionViewModel(
         language: String? = null,
         expectedFingerprint: String? = null
     ) = operation.withLock {
+        val previousState = _screenState.value
         setPhase(TranscriptionUiState.Loading)
         try {
             if (expectedFingerprint != null && expectedFingerprint != audio.sha256) {
@@ -150,6 +184,21 @@ class TranscriptionViewModel(
             if (expectedFingerprint != null && saved == null) {
                 setError("This history entry has been cleared.")
                 return@withLock
+            }
+            if (audio.isShared && (audio.durationMillis == null || audio.durationMillis <= 0 || audio.durationMillis > 300_000)) {
+                val confirmation = CompletableDeferred<Boolean>()
+                audioConfirmation = confirmation
+                setPhase(TranscriptionUiState.AwaitingAudioConfirmation(audio.displayName, audio.durationMillis))
+                val approved = try {
+                    confirmation.await()
+                } finally {
+                    audioConfirmation = null
+                }
+                if (!approved) {
+                    _screenState.value = previousState
+                    return@withLock
+                }
+                setPhase(TranscriptionUiState.Loading)
             }
             var settings = settingsRepository.settingsFlow.first()
             if (settings.apiKey.isBlank()) {
@@ -176,6 +225,7 @@ class TranscriptionViewModel(
                 saved.id
             }
             val autoProcess = settingsRepository.settingsFlow.first().autoProcess && result.isNotBlank()
+            clearCustomPrompt()
             _screenState.value = TranscriptionScreenState(
                 transcription = result,
                 selectedFileName = audio.displayName,
@@ -190,10 +240,21 @@ class TranscriptionViewModel(
         }
     }
 
-    fun formatText(promptId: String? = null): Boolean {
+    fun formatText(promptId: String? = null, customPrompt: String? = null): Boolean {
         val current = _screenState.value
-        if (current.transcription.isBlank() || !operation.tryLock()) return false
+        if (current.transcription.isBlank() || customPrompt?.isBlank() == true || !operation.tryLock()) return false
+        if (customPrompt != null) {
+            _customPromptState.value = CustomPromptState(
+                transcription = current.transcription,
+                historyEntryId = current.historyEntryId,
+                prompt = customPrompt,
+                isSelected = true
+            )
+        } else {
+            clearCustomPrompt()
+        }
         _screenState.value = current.copy(
+            formattedText = if (customPrompt != null) "" else current.formattedText,
             phase = TranscriptionUiState.FormattingText,
             formattingEntryId = current.historyEntryId,
             formattingPromptId = promptId,
@@ -202,7 +263,7 @@ class TranscriptionViewModel(
         )
         viewModelScope.launch {
             try {
-                formatTextInternal(current.transcription, current.historyEntryId, promptId)
+                formatTextInternal(current.transcription, current.historyEntryId, promptId, customPrompt)
             } finally {
                 operation.unlock()
             }
@@ -213,6 +274,7 @@ class TranscriptionViewModel(
     fun formatHistoryEntry(entryId: Long, promptId: String): Boolean {
         if (!operation.tryLock()) return false
         val previousState = _screenState.value
+        if (previousState.historyEntryId == entryId) clearCustomPrompt()
         _screenState.value = previousState.copy(
             formattingEntryId = entryId,
             formattingPromptId = promptId,
@@ -257,20 +319,34 @@ class TranscriptionViewModel(
         return true
     }
 
-    private suspend fun formatTextInternal(source: String, entryId: Long?, promptId: String? = null) {
+    private suspend fun formatTextInternal(
+        source: String,
+        entryId: Long?,
+        promptId: String? = null,
+        customPrompt: String? = null
+    ) {
         try {
             val settings = settingsRepository.settingsFlow.first()
             if (settings.apiKey.isBlank()) {
                 setError("Add an OpenAI API key in Settings before formatting.")
                 return
             }
-            val prompt = if (promptId == null) settings.activePrompt else settings.prompts.firstOrNull { it.id == promptId }
-            if (prompt == null) {
+            val prompt = if (customPrompt == null) {
+                if (promptId == null) settings.activePrompt else settings.prompts.firstOrNull { it.id == promptId }
+            } else null
+            if (customPrompt == null && prompt == null) {
                 setError("This prompt is no longer available.")
                 return
             }
-            _screenState.value = _screenState.value.copy(formattingEntryId = entryId, formattingPromptId = prompt.id)
-            val result = formatAndSave(source, entryId, settings, prompt)
+            _screenState.value = _screenState.value.copy(
+                formattingEntryId = entryId,
+                formattingPromptId = prompt?.id
+            )
+            val result = if (customPrompt == null) {
+                formatAndSave(source, entryId, settings, requireNotNull(prompt))
+            } else {
+                repository.formatText(source, settings.apiKey, customPrompt, settings.llmModel)
+            }
             _screenState.value = _screenState.value.copy(
                 formattedText = result.text,
                 formattingEntryId = null,

@@ -61,6 +61,23 @@ class HistoryFormattingViewModelTest {
         assertEquals(saved, history.results(entry.id).first())
     }
 
+    @Test
+    fun customPromptDoesNotCreateAHistoryResult() = runBlocking {
+        val entry = history.saveRaw("fingerprint", "note.m4a", "saved raw", "Audio", 1L)
+        history.savePromptResult(entry.id, "first", "First", "old result", "Old")
+        val settings = FakeSettings()
+        val gateway = Gateway()
+        val viewModel = TranscriptionViewModel(gateway, settings, history)
+        viewModel.showHistoryEntry(entry)
+
+        assertTrue(viewModel.formatText(customPrompt = "Return a haiku."))
+        withTimeout(5_000) { viewModel.screenState.first { !it.isBusy } }
+
+        assertEquals("Return a haiku.", gateway.prompt)
+        assertEquals("first", settings.settingsFlow.value.activePromptId)
+        assertEquals(mapOf("first" to "old result"), history.results(entry.id).first().associate { it.promptId to it.formattedText })
+    }
+
     private class FakeSettings : SettingsGateway {
         override val settingsFlow: StateFlow<AppSettings> = MutableStateFlow(
             AppSettings(

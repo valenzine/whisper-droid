@@ -13,7 +13,7 @@ Whisper Droid is an Android app for transcribing audio files using the OpenAI sp
 - Format transcribed text using an LLM backend for improved readability
 - Settings screen with DataStore-backed persistence for API key, prompt, and model selection
 - Optional automatic LLM processing after each successful transcription
-- Saved editing prompts and one saved edit per prompt
+- Saved editing prompts and one saved edit per prompt, plus a temporary Custom editing action
 - Local transcript history, exact-audio reuse, and a full-screen Markdown reader
 
 ## Quick start
@@ -54,7 +54,8 @@ history.
 
 - Tap the audio-file icon to choose a file, or share audio to Whisper Droid from another app.
 - Select a transcription model in Settings and a language on the main screen.
-- Tap a prompt pill to open its saved edit. Use **Edit transcript** to create an edit or **Run again** to refresh it. Manage prompts and automatic editing in Settings.
+- Tap a prompt pill to open its saved edit. Use **Edit transcript** to create an edit or **Run again** to refresh it. Use **Custom** for one-off instructions without saving the prompt or result to history. Manage prompts and automatic editing in Settings.
+- Shared audio longer than five minutes, or with an unknown duration, asks for confirmation before upload. Shorter clips process automatically. Imports that stall time out so later audio can proceed.
 - Use Copy or Expand for the selected Transcript or Edited tab. Drag the strip under the card to resize the text area.
 - History keeps transcript text and edits on this device. Open **Edits** to view, copy, delete, or rerun a prompt using the saved transcript. Audio is held temporarily during processing.
 - Selecting or sharing the exact same audio opens its saved transcript. **Re-transcribe** is available when the app can still reopen the original file from its picker.
